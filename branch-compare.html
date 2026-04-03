@@ -1,0 +1,922 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Git Branch Comparator</title>
+  <link rel="icon" href="favicon.svg" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #0f172a; font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; color: #e2e8f0; min-height: 100vh; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #1e293b; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #475569; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+    @keyframes fadeIn { from{opacity:0;transform:scale(0.97)} to{opacity:1;transform:scale(1)} }
+
+    .token-screen { display:flex; align-items:center; justify-content:center; min-height:100vh; padding:20px; }
+    .token-box { width:100%; max-width:480px; padding:40px; background:#1e293b; border-radius:16px; border:1px solid #334155; }
+    .token-box h1 { font-size:22px; font-weight:700; color:#818cf8; margin-bottom:10px; }
+    .token-box p { font-size:13px; color:#64748b; line-height:1.6; margin-bottom:12px; }
+    .token-row { display:flex; gap:8px; margin-bottom:12px; }
+    .token-input { flex:1; padding:11px 14px; border-radius:8px; border:1px solid #334155; background:#0f172a; color:#e2e8f0; font-size:14px; outline:none; }
+    .btn-connect { padding:11px 22px; border-radius:8px; border:none; background:#6366f1; color:#fff; font-size:14px; font-weight:600; cursor:pointer; white-space:nowrap; }
+    .btn-connect:disabled { background:#312e81; cursor:not-allowed; }
+    .err-text { color:#f87171; font-size:13px; }
+    code { background:#312e81; color:#a5b4fc; padding:1px 6px; border-radius:4px; font-size:12px; }
+
+    .main { padding:20px 24px; }
+    .header { display:flex; align-items:center; gap:12px; margin-bottom:20px; flex-wrap:wrap; }
+    .header h1 { font-size:18px; font-weight:700; color:#818cf8; }
+    .legend { display:flex; gap:14px; font-size:12px; color:#94a3b8; align-items:center; }
+    .divider { width:1px; height:16px; background:#334155; }
+    .btn-sm { padding:5px 12px; border-radius:6px; border:1px solid #334155; background:transparent; color:#64748b; font-size:12px; cursor:pointer; }
+    .btn-sm:hover { color:#94a3b8; border-color:#475569; }
+
+    .selectors-grid { display:grid; grid-template-columns:1fr auto 1fr; gap:12px; margin-bottom:16px; align-items:center; }
+    .selector-panel { background:#1e293b; border-radius:12px; padding:16px; border:1px solid #334155; }
+    .panel-label { font-size:11px; font-weight:700; letter-spacing:0.09em; text-transform:uppercase; margin-bottom:12px; }
+    .panel-inputs { display:flex; gap:8px; }
+    .panel-status { margin-top:8px; font-size:12px; display:flex; align-items:center; gap:6px; }
+    .pulse-dot { display:inline-block; width:8px; height:8px; border-radius:50%; opacity:0.7; animation:pulse 1s infinite; }
+    .limit-select { flex-shrink:0; padding:8px 26px 8px 10px; border-radius:7px; border:1px solid #334155; background:#1e293b; color:#94a3b8; font-size:12px; outline:none; cursor:pointer; appearance:none; -webkit-appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2364748b'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 8px center; }
+
+    .stats-bar { display:flex; margin-bottom:16px; background:#1e293b; border-radius:10px; border:1px solid #334155; overflow:hidden; }
+    .stat-cell { flex:1; padding:12px 16px; border-right:1px solid #334155; }
+    .stat-cell:last-child { border-right:none; }
+    .stat-val { font-size:20px; font-weight:700; }
+    .stat-lbl { font-size:11px; color:#64748b; margin-top:3px; }
+
+    .cherry-row { display:grid; grid-template-columns:1fr 80px 1fr; margin-bottom:4px; }
+    .cherry-side { display:flex; align-items:center; justify-content:flex-end; min-height:30px; }
+    .cherry-count { font-size:12px; color:#64748b; margin-right:auto; }
+    .btn-cherry { padding:6px 14px; border-radius:7px; font-size:12px; font-weight:600; cursor:pointer; transition:all 0.15s; border:1px solid #334155; background:transparent; color:#334155; }
+    .btn-cherry.enabled { cursor:pointer; }
+    .btn-cherry:disabled { cursor:not-allowed; }
+
+    .commit-area { position:relative; display:grid; grid-template-columns:1fr 80px 1fr; }
+    .commit-col { z-index:1; }
+    .commit-card { padding:8px 10px; margin-bottom:5px; border-radius:7px; cursor:pointer; display:flex; align-items:flex-start; gap:9px; transition:background 0.12s; }
+    .commit-card input[type=checkbox] { margin-top:3px; flex-shrink:0; cursor:pointer; width:13px; height:13px; }
+    .commit-card .title-link { font-size:13px; font-weight:500; text-decoration:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:block; }
+    .commit-card .title-link:hover { text-decoration:underline; }
+    .commit-card .meta { font-size:11px; color:#64748b; margin-top:3px; display:flex; gap:10px; align-items:center; }
+    .commit-card .sha { font-family:monospace; color:#475569; }
+    .commit-card .ext-link { margin-left:auto; color:#475569; text-decoration:none; font-size:12px; flex-shrink:0; }
+    .commit-card .ext-link:hover { color:#94a3b8; }
+    .commit-svg { position:absolute; top:0; left:0; width:100%; pointer-events:none; z-index:0; overflow:visible; }
+
+    .empty-state { text-align:center; padding:60px 20px; }
+    .empty-state .icon { font-size:40px; margin-bottom:12px; }
+
+    /* Dialog */
+    .dialog-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.75); z-index:1000; display:flex; align-items:center; justify-content:center; padding:20px; }
+    .dialog-box { background:#1e293b; border:1px solid #334155; border-radius:14px; width:100%; max-width:720px; max-height:90vh; overflow-y:auto; padding:28px; animation:fadeIn 0.15s ease; }
+    .dialog-header { display:flex; align-items:flex-start; margin-bottom:20px; }
+    .dialog-title { font-size:17px; font-weight:700; color:#e2e8f0; }
+    .dialog-subtitle { font-size:12px; color:#64748b; margin-top:5px; line-height:1.6; }
+    .dialog-close { margin-left:auto; background:none; border:none; color:#64748b; font-size:22px; cursor:pointer; line-height:1; padding:0 0 0 16px; }
+    .field-label { font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:0.08em; display:block; margin-bottom:6px; }
+    .field-input { width:100%; padding:8px 11px; border-radius:7px; border:1px solid #334155; background:#0f172a; color:#e2e8f0; font-size:13px; outline:none; box-sizing:border-box; }
+    .field-input:focus { border-color:#6366f1; }
+    .field-textarea { width:100%; padding:8px 11px; border-radius:7px; border:1px solid #334155; background:#0f172a; color:#e2e8f0; font-size:13px; outline:none; box-sizing:border-box; resize:vertical; font-family:inherit; line-height:1.55; }
+    .field-textarea:focus { border-color:#6366f1; }
+    .two-col { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:16px; }
+    .field-group { margin-bottom:16px; }
+    .commits-preview { background:#0f172a; border-radius:8px; padding:10px 14px; max-height:150px; overflow-y:auto; border:1px solid #1e293b; margin-bottom:20px; }
+    .preview-row { font-size:12px; color:#94a3b8; padding:3px 0; display:flex; gap:10px; border-bottom:1px solid #1e293b; }
+    .preview-row:last-child { border-bottom:none; }
+    .script-header { display:flex; align-items:center; margin-bottom:8px; }
+    .btn-copy { padding:5px 14px; border-radius:6px; font-size:12px; cursor:pointer; transition:all 0.2s; }
+    .script-pre { background:#0f172a; border-radius:8px; padding:12px 16px; font-size:12px; color:#94a3b8; overflow-x:auto; font-family:'SFMono-Regular',Consolas,monospace; line-height:1.65; border:1px solid #334155; white-space:pre; margin-bottom:20px; }
+    .dialog-footer { display:flex; justify-content:flex-end; }
+    .btn-close-dialog { padding:9px 22px; border-radius:8px; border:1px solid #334155; background:transparent; color:#94a3b8; font-size:13px; cursor:pointer; }
+  </style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+
+/* ── GitHub API ─────────────────────────────────────────────────────────── */
+async function ghGet(token, path, params = {}) {
+  const url = new URL('https://api.github.com' + path);
+  Object.entries({ ...params, per_page: 100 }).forEach(([k, v]) => url.searchParams.set(k, String(v)));
+  const r = await fetch(url, {
+    headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github+json' }
+  });
+  if (!r.ok) { const b = await r.json().catch(() => ({})); throw new Error(b.message || `HTTP ${r.status}`); }
+  return r.json();
+}
+async function ghGetAll(token, path, params = {}, maxPages = 10) {
+  const all = [];
+  for (let page = 1; page <= maxPages; page++) {
+    const d = await ghGet(token, path, { ...params, page });
+    all.push(...d);
+    if (d.length < 100) break;
+  }
+  return all;
+}
+
+/* ── Combobox ───────────────────────────────────────────────────────────── */
+class Combobox {
+  constructor({ onChange, placeholder = '', disabled = false } = {}) {
+    this.onChange = onChange;
+    this._options = [];
+    this._value   = '';
+    this._open    = false;
+
+    this.wrap = Object.assign(document.createElement('div'), {
+      style: 'position:relative;flex:1;min-width:0;'
+    });
+
+    this.input = document.createElement('input');
+    Object.assign(this.input.style, {
+      width:'100%', padding:'8px 11px', borderRadius:'7px', border:'1px solid #334155',
+      background: disabled ? '#0f172a' : '#1e293b', color: disabled ? '#475569' : '#e2e8f0',
+      fontSize:'13px', outline:'none', transition:'border-color 0.15s', boxSizing:'border-box',
+    });
+    this.input.placeholder = placeholder;
+    this.input.disabled    = disabled;
+
+    this.dropdown = document.createElement('ul');
+    Object.assign(this.dropdown.style, {
+      position:'absolute', top:'calc(100% + 3px)', left:'0', right:'0', zIndex:'9999',
+      margin:'0', padding:'0', listStyle:'none', background:'#1e293b',
+      border:'1px solid #334155', borderRadius:'8px', maxHeight:'210px', overflowY:'auto',
+      boxShadow:'0 10px 30px rgba(0,0,0,0.6)', display:'none',
+    });
+
+    this.wrap.append(this.input, this.dropdown);
+    this._bind();
+  }
+
+  get el() { return this.wrap; }
+
+  setOptions(opts) { this._options = opts || []; if (this._open) this._render(); }
+  setValue(v)      { this._value = v; this.input.value = v; }
+  setDisabled(d)   {
+    this.input.disabled = d;
+    this.input.style.background = d ? '#0f172a' : '#1e293b';
+    this.input.style.color      = d ? '#475569' : '#e2e8f0';
+    if (d) { this._open = false; this.dropdown.style.display = 'none'; }
+  }
+  setPlaceholder(p) { this.input.placeholder = p; }
+
+  _filtered() {
+    const t = this.input.value.toLowerCase();
+    return t ? this._options.filter(o => o.toLowerCase().includes(t)) : this._options;
+  }
+
+  _render() {
+    this.dropdown.innerHTML = '';
+    const items = this._filtered();
+    if (!items.length || !this._open) { this.dropdown.style.display = 'none'; return; }
+    items.forEach(opt => {
+      const li = document.createElement('li');
+      li.textContent = opt;
+      li.style.cssText = `padding:8px 12px;cursor:pointer;font-size:13px;
+        color:${opt === this._value ? '#818cf8' : '#cbd5e1'};
+        font-weight:${opt === this._value ? '600' : '400'};
+        border-bottom:1px solid #0f172a;`;
+      li.addEventListener('mouseenter', () => li.style.background = '#334155');
+      li.addEventListener('mouseleave', () => li.style.background = 'transparent');
+      li.addEventListener('mousedown',  e => { e.preventDefault(); this._pick(opt); });
+      this.dropdown.appendChild(li);
+    });
+    this.dropdown.style.display = 'block';
+  }
+
+  _pick(opt) {
+    this._value = opt; this.input.value = opt;
+    this._open  = false; this.dropdown.style.display = 'none';
+    this.onChange(opt);
+  }
+
+  _bind() {
+    const open = () => { this._open = true; this._render(); };
+    this.input.addEventListener('focus', open);
+    this.input.addEventListener('click', open);
+    this.input.addEventListener('input', () => {
+      this._open = true; this._render();
+      if (!this.input.value) { this._value = ''; this.onChange(''); }
+    });
+    this.input.addEventListener('keydown', e => {
+      if (e.key === 'Enter')  { const f = this._filtered(); if (f[0]) this._pick(f[0]); }
+      if (e.key === 'Escape') { this._open = false; this.dropdown.style.display = 'none'; }
+    });
+    this.input.addEventListener('focus', () => this.input.style.borderColor = '#6366f1');
+    this.input.addEventListener('blur',  () => this.input.style.borderColor = '#334155');
+    document.addEventListener('mousedown', e => {
+      if (!this.wrap.contains(e.target)) { this._open = false; this.dropdown.style.display = 'none'; }
+    });
+  }
+}
+
+/* ── App state ──────────────────────────────────────────────────────────── */
+const PAT_KEY = 'gh_branch_compare_pat';
+const app = { token: '', username: '', orgs: [] };
+
+const mkPanel = () => ({
+  org: '', repo: '', branch: '',
+  repos: [], branches: [], commits: [],
+  commitLimit: 500, busy: '', err: '',
+  _genRepos: 0, _genBranches: 0, _genCommits: 0,
+});
+const panels  = { left: mkPanel(), right: mkPanel() };
+const selected = { left: new Set(), right: new Set() };
+let   dialogSide = null;
+
+/* DOM refs – populated when rendering */
+const ui = {};      // top-level elements
+const pui = {};     // per-panel UI elements: pui.left.orgCombo, etc.
+
+/* ── Panel loading ──────────────────────────────────────────────────────── */
+async function loadRepos(side) {
+  const p = panels[side], u = pui[side];
+  p.repo = ''; p.branch = ''; p.repos = []; p.branches = []; p.commits = [];
+  p.busy = 'Loading repositories…'; p.err = '';
+  selected[side].clear();
+  applyPanelStatus(side);
+  u.repoCombo.setValue(''); u.repoCombo.setOptions([]); u.repoCombo.setDisabled(true);
+  u.branchCombo.setValue(''); u.branchCombo.setOptions([]); u.branchCombo.setDisabled(true);
+  renderBothCommitLists();
+
+  const gen = ++p._genRepos;
+  try {
+    const data = p.org === app.username
+      ? await ghGetAll(app.token, '/user/repos', { type: 'all' }, 20)
+      : await ghGetAll(app.token, `/orgs/${p.org}/repos`, { type: 'all' }, 20);
+    if (p._genRepos !== gen) return;
+    p.repos = data.map(r => r.name).sort((a, b) => a.localeCompare(b));
+    u.repoCombo.setOptions(p.repos); u.repoCombo.setDisabled(false);
+  } catch (e) { if (p._genRepos === gen) p.err = e.message; }
+  if (p._genRepos === gen) { p.busy = ''; applyPanelStatus(side); }
+}
+
+async function loadBranches(side) {
+  const p = panels[side], u = pui[side];
+  p.branch = ''; p.branches = []; p.commits = [];
+  p.busy = 'Loading branches…'; p.err = '';
+  selected[side].clear();
+  applyPanelStatus(side);
+  u.branchCombo.setValue(''); u.branchCombo.setOptions([]); u.branchCombo.setDisabled(true);
+  renderBothCommitLists();
+
+  const gen = ++p._genBranches;
+  try {
+    const data = await ghGetAll(app.token, `/repos/${p.org}/${p.repo}/branches`, {}, 20);
+    if (p._genBranches !== gen) return;
+    p.branches = data.map(b => b.name).sort((a, b) => a.localeCompare(b));
+    u.branchCombo.setOptions(p.branches); u.branchCombo.setDisabled(false);
+  } catch (e) { if (p._genBranches === gen) p.err = e.message; }
+  if (p._genBranches === gen) { p.busy = ''; applyPanelStatus(side); }
+}
+
+async function loadCommits(side) {
+  const p = panels[side];
+  p.commits = [];
+  p.busy = `Loading commits (${p.commitLimit === 0 ? 'all' : `up to ${p.commitLimit.toLocaleString()}`})…`;
+  p.err = '';
+  selected[side].clear();
+  applyPanelStatus(side);
+  renderBothCommitLists();
+
+  const gen = ++p._genCommits;
+  const maxPages = p.commitLimit === 0 ? 999 : Math.ceil(p.commitLimit / 100);
+  try {
+    const data = await ghGetAll(app.token, `/repos/${p.org}/${p.repo}/commits`, { sha: p.branch }, maxPages);
+    if (p._genCommits !== gen) return;
+    p.commits = data.map(c => ({
+      sha:    c.sha,
+      title:  (c.commit.message || '').split('\n')[0].trim(),
+      author: c.commit.author?.name || c.commit.committer?.name || 'Unknown',
+      date:   c.commit.author?.date || c.commit.committer?.date || '',
+      url:    c.html_url,
+    }));
+    applyPanelLabel(side);
+  } catch (e) { if (p._genCommits === gen) p.err = e.message; }
+  if (p._genCommits === gen) { p.busy = ''; applyPanelStatus(side); renderBothCommitLists(); }
+}
+
+/* ── Token screen ───────────────────────────────────────────────────────── */
+function buildTokenScreen() {
+  const div = document.createElement('div');
+  div.className = 'token-screen';
+  div.innerHTML = `
+    <div class="token-box">
+      <div style="font-size:28px;margin-bottom:8px">🔀</div>
+      <h1>Git Branch Comparator</h1>
+      <p style="margin-bottom:8px">Visually compare commits across any two branches — even from different repositories and organizations.</p>
+      <p>A GitHub Personal Access Token with <code>repo</code> and <code>read:org</code> scopes is required. Your token is never stored beyond your own browser.</p>
+      <div class="token-row" style="margin-top:20px">
+        <input class="token-input" type="password" placeholder="ghp_xxxxxxxxxxxxxxxxxxxxxxxx" id="pat-input" />
+        <button class="btn-connect" id="btn-connect">Connect</button>
+      </div>
+      <div id="auth-err" class="err-text"></div>
+    </div>`;
+
+  const input  = div.querySelector('#pat-input');
+  const btn    = div.querySelector('#btn-connect');
+  const errEl  = div.querySelector('#auth-err');
+
+  const savedPat = localStorage.getItem(PAT_KEY);
+  if (savedPat) input.value = savedPat;
+
+  const doConnect = () => {
+    const t = input.value.trim();
+    if (!t) return;
+    btn.disabled = true; btn.textContent = 'Connecting…'; errEl.textContent = '';
+    connectWithToken(t).catch(e => {
+      errEl.textContent = '⚠ ' + e.message;
+      btn.disabled = false; btn.textContent = 'Connect';
+    });
+  };
+  btn.addEventListener('click', doConnect);
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') doConnect(); });
+  return div;
+}
+
+/* ── Connect ────────────────────────────────────────────────────────────── */
+async function connectWithToken(t) {
+  const user    = await ghGet(t, '/user');
+  const orgData = await ghGetAll(t, '/user/orgs', {}, 10);
+  app.token    = t;
+  app.username = user.login;
+  app.orgs     = [user.login, ...orgData.map(o => o.login)].sort((a, b) => a.localeCompare(b));
+  localStorage.setItem(PAT_KEY, t);
+  showMain();
+}
+
+function disconnect(forget) {
+  app.token = ''; app.username = ''; app.orgs = [];
+  panels.left = mkPanel(); panels.right = mkPanel();
+  selected.left.clear(); selected.right.clear(); dialogSide = null;
+  if (forget) { localStorage.removeItem(PAT_KEY); }
+  const root = document.getElementById('app');
+  root.innerHTML = '';
+  root.appendChild(buildTokenScreen());
+}
+
+/* ── Main app scaffold ──────────────────────────────────────────────────── */
+function showMain() {
+  const root = document.getElementById('app');
+  root.innerHTML = '';
+
+  const main = document.createElement('div');
+  main.className = 'main';
+
+  /* Header */
+  const header = document.createElement('div');
+  header.className = 'header';
+  header.innerHTML = `
+    <span style="font-size:18px">🔀</span>
+    <h1>Git Branch Comparator</h1>
+    <div style="flex:1"></div>
+    <div class="legend">
+      <span><span style="color:#4ade80">●</span> In both</span>
+      <span><span style="color:#fbbf24">●</span> Only in A</span>
+      <span><span style="color:#67e8f9">●</span> Only in B</span>
+    </div>
+    <div class="divider"></div>
+    <span style="font-size:12px;color:#475569">Signed in as <strong style="color:#64748b">${app.username}</strong></span>
+    <button class="btn-sm" id="btn-disconnect">Disconnect</button>
+    <button class="btn-sm" id="btn-forget" title="Disconnect and remove saved token">Forget token</button>`;
+  header.querySelector('#btn-disconnect').addEventListener('click', () => disconnect(false));
+  header.querySelector('#btn-forget').addEventListener('click', () => disconnect(true));
+  main.appendChild(header);
+
+  /* Selectors */
+  const selGrid = document.createElement('div');
+  selGrid.className = 'selectors-grid';
+  selGrid.appendChild(buildSelectorPanel('left'));
+  const vs = document.createElement('div');
+  vs.style.cssText = 'text-align:center;color:#475569;font-size:13px;font-weight:600;padding:0 8px;';
+  vs.textContent = 'vs';
+  selGrid.appendChild(vs);
+  selGrid.appendChild(buildSelectorPanel('right'));
+  main.appendChild(selGrid);
+
+  /* Stats bar */
+  const stats = document.createElement('div');
+  stats.className = 'stats-bar';
+  stats.style.display = 'none';
+  stats.id = 'stats-bar';
+  [
+    { id: 'stat-shared',  label: 'Shared commits', color: '#4ade80' },
+    { id: 'stat-onlyL',   label: 'Only in A',      color: '#fbbf24' },
+    { id: 'stat-onlyR',   label: 'Only in B',      color: '#67e8f9' },
+    { id: 'stat-totalL',  label: 'Total in A',     color: '#94a3b8' },
+    { id: 'stat-totalR',  label: 'Total in B',     color: '#94a3b8' },
+  ].forEach(s => {
+    const cell = document.createElement('div');
+    cell.className = 'stat-cell';
+    cell.innerHTML = `<div class="stat-val" id="${s.id}" style="color:${s.color}">0</div><div class="stat-lbl">${s.label}</div>`;
+    stats.appendChild(cell);
+  });
+  main.appendChild(stats);
+  ui.statsBar = stats;
+
+  /* Cherry-pick row */
+  const cherryRow = document.createElement('div');
+  cherryRow.className = 'cherry-row';
+  cherryRow.id = 'cherry-row';
+  cherryRow.style.display = 'none';
+  ['left', 'right'].forEach((side, i) => {
+    const cell = document.createElement('div');
+    cell.className = 'cherry-side';
+    const count = document.createElement('span');
+    count.className = 'cherry-count';
+    count.id = `cherry-count-${side}`;
+    const btn = document.createElement('button');
+    btn.className = 'btn-cherry';
+    btn.id = `cherry-btn-${side}`;
+    btn.textContent = '🍒 Cherry-pick commits';
+    btn.disabled = true;
+    btn.addEventListener('click', () => openDialog(side));
+    cell.append(count, btn);
+    if (i === 0) { cherryRow.appendChild(cell); cherryRow.appendChild(document.createElement('div')); }
+    else cherryRow.appendChild(cell);
+  });
+  main.appendChild(cherryRow);
+  ui.cherryRow = cherryRow;
+
+  /* Commit area */
+  const area = document.createElement('div');
+  area.className = 'commit-area';
+  area.id = 'commit-area';
+
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.classList.add('commit-svg');
+  svg.id = 'commit-svg';
+  svg.innerHTML = `<defs><linearGradient id="lg" x1="0%" y1="0%" x2="100%" y2="0%">
+    <stop offset="0%"   stop-color="#4ade80" stop-opacity="0.55"/>
+    <stop offset="50%"  stop-color="#4ade80" stop-opacity="0.35"/>
+    <stop offset="100%" stop-color="#4ade80" stop-opacity="0.55"/>
+  </linearGradient></defs>`;
+
+  const leftCol  = document.createElement('div'); leftCol.className  = 'commit-col'; leftCol.id  = 'left-commits';
+  const spacer   = document.createElement('div');
+  const rightCol = document.createElement('div'); rightCol.className = 'commit-col'; rightCol.id = 'right-commits';
+
+  area.append(svg, leftCol, spacer, rightCol);
+  main.appendChild(area);
+  ui.area = area; ui.svg = svg; ui.leftCol = leftCol; ui.rightCol = rightCol;
+
+  /* Empty state */
+  const empty = document.createElement('div');
+  empty.id = 'empty-state';
+  empty.className = 'empty-state';
+  empty.innerHTML = '<div class="icon">↑</div><p style="font-size:15px;color:#475569">Select an organization, repository, and branch on each side to start comparing</p>';
+  main.appendChild(empty);
+  ui.empty = empty;
+
+  /* Dialog (built once, hidden) */
+  main.appendChild(buildDialog());
+
+  root.appendChild(main);
+  renderBothCommitLists();
+  window.addEventListener('resize', recalcSVG);
+}
+
+/* ── Selector panel ─────────────────────────────────────────────────────── */
+function buildSelectorPanel(side) {
+  const color  = side === 'left' ? '#fbbf24' : '#67e8f9';
+  const label  = side === 'left' ? 'Branch A' : 'Branch B';
+  const p      = panels[side];
+
+  const panel  = document.createElement('div');
+  panel.className = 'selector-panel';
+
+  const lbl    = document.createElement('div');
+  lbl.className = 'panel-label';
+  lbl.style.color = color;
+  lbl.id = `panel-label-${side}`;
+  lbl.textContent = label;
+
+  const row    = document.createElement('div');
+  row.className = 'panel-inputs';
+
+  const orgCombo    = new Combobox({ placeholder: 'Organization', onChange: v => { p.org = v; v ? loadRepos(side) : clearPanel(side); } });
+  const repoCombo   = new Combobox({ placeholder: 'Repository',   onChange: v => { p.repo = v; v ? loadBranches(side) : clearBranchAndCommits(side); }, disabled: true });
+  const branchCombo = new Combobox({ placeholder: 'Branch',       onChange: v => { p.branch = v; v ? loadCommits(side) : clearCommits(side); }, disabled: true });
+
+  orgCombo.setOptions(app.orgs);
+  row.append(orgCombo.el, repoCombo.el, branchCombo.el);
+
+  const limitSel = document.createElement('select');
+  limitSel.className = 'limit-select';
+  limitSel.title = 'Maximum number of commits to load';
+  [100, 500, 1000, 2000, 5000, 0].forEach(v => {
+    const opt = document.createElement('option');
+    opt.value = v; opt.textContent = v === 0 ? 'All commits' : `${v.toLocaleString()} commits`;
+    if (v === 500) opt.selected = true;
+    limitSel.appendChild(opt);
+  });
+  limitSel.addEventListener('change', () => { p.commitLimit = Number(limitSel.value); if (p.branch) loadCommits(side); });
+  row.appendChild(limitSel);
+
+  const status = document.createElement('div');
+  status.className = 'panel-status';
+  status.id = `panel-status-${side}`;
+  status.style.display = 'none';
+
+  panel.append(lbl, row, status);
+
+  pui[side] = { orgCombo, repoCombo, branchCombo, limitSel, statusEl: status, labelEl: lbl, baseLabel: label };
+  return panel;
+}
+
+function clearPanel(side) {
+  const p = panels[side], u = pui[side];
+  p.repo = ''; p.branch = ''; p.repos = []; p.branches = []; p.commits = []; p.busy = ''; p.err = '';
+  selected[side].clear();
+  u.repoCombo.setValue(''); u.repoCombo.setOptions([]); u.repoCombo.setDisabled(true);
+  u.branchCombo.setValue(''); u.branchCombo.setOptions([]); u.branchCombo.setDisabled(true);
+  applyPanelStatus(side); applyPanelLabel(side); renderBothCommitLists();
+}
+function clearBranchAndCommits(side) {
+  const p = panels[side], u = pui[side];
+  p.branch = ''; p.branches = []; p.commits = []; p.busy = ''; p.err = '';
+  selected[side].clear();
+  u.branchCombo.setValue(''); u.branchCombo.setOptions([]); u.branchCombo.setDisabled(true);
+  applyPanelStatus(side); applyPanelLabel(side); renderBothCommitLists();
+}
+function clearCommits(side) {
+  panels[side].commits = []; selected[side].clear();
+  applyPanelLabel(side); renderBothCommitLists();
+}
+
+function applyPanelStatus(side) {
+  const p = panels[side], s = pui[side].statusEl;
+  if (p.busy) {
+    s.style.display = 'flex';
+    s.style.color   = '#64748b';
+    const dotColor  = side === 'left' ? '#fbbf24' : '#67e8f9';
+    s.innerHTML = `<span class="pulse-dot" style="background:${dotColor}"></span> ${p.busy}`;
+  } else if (p.err) {
+    s.style.display = 'flex'; s.style.color = '#f87171';
+    s.textContent = '⚠ ' + p.err;
+  } else {
+    s.style.display = 'none';
+  }
+}
+function applyPanelLabel(side) {
+  const u    = pui[side];
+  if (!u) return;
+  const base = u.baseLabel;
+  const n    = panels[side].commits.length;
+  u.labelEl.innerHTML = n > 0
+    ? `${base} <span style="font-size:11px;font-weight:400;color:#475569;text-transform:none;letter-spacing:0"> — ${n} commits</span>`
+    : base;
+}
+
+/* ── Commit list rendering ──────────────────────────────────────────────── */
+const cardEls = { left: [], right: [] };
+
+function renderBothCommitLists() {
+  const lp = panels.left, rp = panels.right;
+  const rightTitles = new Set(rp.commits.map(c => c.title));
+  const leftTitles  = new Set(lp.commits.map(c => c.title));
+  const hasAny = lp.commits.length > 0 || rp.commits.length > 0;
+
+  cardEls.left  = renderCommitCol('left',  ui.leftCol,  rightTitles, leftTitles);
+  cardEls.right = renderCommitCol('right', ui.rightCol, leftTitles,  rightTitles);
+
+  /* Stats bar */
+  if (lp.commits.length > 0 && rp.commits.length > 0) {
+    ui.statsBar.style.display = 'flex';
+    document.getElementById('stat-shared').textContent = lp.commits.filter(c => rightTitles.has(c.title)).length;
+    document.getElementById('stat-onlyL').textContent  = lp.commits.filter(c => !rightTitles.has(c.title)).length;
+    document.getElementById('stat-onlyR').textContent  = rp.commits.filter(c => !leftTitles.has(c.title)).length;
+    document.getElementById('stat-totalL').textContent = lp.commits.length;
+    document.getElementById('stat-totalR').textContent = rp.commits.length;
+  } else {
+    ui.statsBar.style.display = 'none';
+  }
+
+  ui.cherryRow.style.display = hasAny ? 'grid' : 'none';
+  ui.empty.style.display     = hasAny ? 'none' : 'block';
+  updateCherryBtns();
+  recalcSVG();
+}
+
+function renderCommitCol(side, col, matchTitles, ownTitles) {
+  col.innerHTML = '';
+  const commits = panels[side].commits;
+  const els = [];
+  commits.forEach(commit => {
+    const inOther = matchTitles.has(commit.title);
+    const color   = inOther ? '#4ade80' : (side === 'left' ? '#fbbf24' : '#67e8f9');
+    const isSel   = selected[side].has(commit.sha);
+
+    const card = document.createElement('div');
+    card.className = 'commit-card';
+    card.dataset.sha = commit.sha;
+    card.style.background = isSel ? color + '30' : color + '18';
+    card.style.borderTop    = `1px solid ${isSel ? color + '60' : color + '28'}`;
+    card.style.borderBottom = `1px solid ${isSel ? color + '60' : color + '28'}`;
+    if (side === 'left') {
+      card.style.borderLeft  = `3px solid ${color}`;
+      card.style.borderRight = `1px solid ${isSel ? color + '60' : color + '28'}`;
+    } else {
+      card.style.borderRight = `3px solid ${color}`;
+      card.style.borderLeft  = `1px solid ${isSel ? color + '60' : color + '28'}`;
+    }
+
+    const cb = document.createElement('input');
+    cb.type = 'checkbox'; cb.checked = isSel;
+    cb.style.accentColor = color;
+    cb.className = 'commit-card-cb';
+    cb.addEventListener('change', e => { e.stopPropagation(); toggleSelect(side, commit.sha, card, color, cb); });
+    cb.addEventListener('click',  e => e.stopPropagation());
+
+    const body = document.createElement('div');
+    body.style.cssText = 'flex:1;min-width:0;';
+
+    const titleLink = document.createElement('a');
+    titleLink.className = 'title-link';
+    titleLink.href = commit.url;
+    titleLink.target = '_blank';
+    titleLink.rel = 'noopener';
+    titleLink.textContent = commit.title || '(no message)';
+    titleLink.style.color = color;
+    titleLink.addEventListener('click', e => e.stopPropagation());
+
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    const sha  = document.createElement('span'); sha.className = 'sha'; sha.textContent = commit.sha.slice(0, 7);
+    const auth = document.createElement('span'); auth.textContent = commit.author;
+    const extA = document.createElement('a');
+    extA.className = 'ext-link'; extA.href = commit.url; extA.target = '_blank'; extA.rel = 'noopener';
+    extA.textContent = '↗'; extA.title = 'Open on GitHub';
+    extA.addEventListener('click', e => e.stopPropagation());
+
+    meta.append(sha, auth);
+    if (commit.date) { const d = document.createElement('span'); d.textContent = new Date(commit.date).toLocaleDateString(); meta.appendChild(d); }
+    meta.appendChild(extA);
+    body.append(titleLink, meta);
+    card.append(cb, body);
+
+    card.addEventListener('click', () => toggleSelect(side, commit.sha, card, color, cb));
+    card.addEventListener('mouseenter', () => { if (!selected[side].has(commit.sha)) card.style.background = color + '24'; });
+    card.addEventListener('mouseleave', () => { card.style.background = selected[side].has(commit.sha) ? color + '30' : color + '18'; });
+
+    col.appendChild(card);
+    els.push(card);
+  });
+  return els;
+}
+
+/* ── Selection ──────────────────────────────────────────────────────────── */
+function toggleSelect(side, sha, card, color, cb) {
+  const sel = selected[side];
+  if (sel.has(sha)) { sel.delete(sha); } else { sel.add(sha); }
+  const isSel = sel.has(sha);
+  cb.checked = isSel;
+  card.style.background   = isSel ? color + '30' : color + '18';
+  const borderVal = isSel ? color + '60' : color + '28';
+  card.style.borderTop    = `1px solid ${borderVal}`;
+  card.style.borderBottom = `1px solid ${borderVal}`;
+  if (side === 'left')  card.style.borderRight = `1px solid ${borderVal}`;
+  else                  card.style.borderLeft  = `1px solid ${borderVal}`;
+  updateCherryBtns();
+}
+
+function updateCherryBtns() {
+  ['left', 'right'].forEach(side => {
+    const count  = selected[side].size;
+    const btn    = document.getElementById(`cherry-btn-${side}`);
+    const countEl = document.getElementById(`cherry-count-${side}`);
+    const color  = side === 'left' ? '#fbbf24' : '#67e8f9';
+    if (!btn) return;
+    btn.disabled = count === 0;
+    if (count > 0) {
+      btn.classList.add('enabled');
+      btn.style.borderColor = color + '60'; btn.style.background = color + '18'; btn.style.color = color;
+      countEl.textContent = `${count} commit${count !== 1 ? 's' : ''} selected`;
+    } else {
+      btn.classList.remove('enabled');
+      btn.style.borderColor = '#334155'; btn.style.background = 'transparent'; btn.style.color = '#334155';
+      countEl.textContent = '';
+    }
+  });
+}
+
+/* ── SVG lines ──────────────────────────────────────────────────────────── */
+function recalcSVG() {
+  if (!ui.svg || !ui.area) return;
+  const lCommits = panels.left.commits;
+  const rCommits = panels.right.commits;
+
+  // Remove old paths (keep defs)
+  [...ui.svg.querySelectorAll('path')].forEach(p => p.remove());
+  if (!lCommits.length || !rCommits.length) { ui.svg.style.height = '0'; return; }
+
+  const cRect   = ui.area.getBoundingClientRect();
+  const rTitles = new Map(rCommits.map((c, i) => [c.title, i]));
+
+  lCommits.forEach((lc, li) => {
+    const ri = rTitles.get(lc.title);
+    if (ri === undefined) return;
+    const lEl = cardEls.left[li];
+    const rEl = cardEls.right[ri];
+    if (!lEl || !rEl) return;
+    const lR = lEl.getBoundingClientRect();
+    const rR = rEl.getBoundingClientRect();
+    const x1 = lR.right - cRect.left,  y1 = lR.top + lR.height / 2 - cRect.top;
+    const x2 = rR.left  - cRect.left,  y2 = rR.top + rR.height / 2 - cRect.top;
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', `M ${x1},${y1} C ${x1+35},${y1} ${x2-35},${y2} ${x2},${y2}`);
+    path.setAttribute('stroke', 'url(#lg)'); path.setAttribute('stroke-width', '1.5'); path.setAttribute('fill', 'none');
+    ui.svg.appendChild(path);
+  });
+
+  ui.svg.style.height = ui.area.scrollHeight + 'px';
+}
+
+/* ── Cherry-pick dialog ─────────────────────────────────────────────────── */
+function buildDialog() {
+  const overlay = document.createElement('div');
+  overlay.className = 'dialog-overlay';
+  overlay.id = 'dialog-overlay';
+  overlay.style.display = 'none';
+
+  const box = document.createElement('div');
+  box.className = 'dialog-box';
+
+  box.innerHTML = `
+    <div class="dialog-header">
+      <div>
+        <div class="dialog-title" id="dialog-title"></div>
+        <div class="dialog-subtitle" id="dialog-subtitle"></div>
+      </div>
+      <button class="dialog-close" id="dialog-close">×</button>
+    </div>
+    <div id="dialog-commits-preview" class="commits-preview"></div>
+    <div class="two-col">
+      <div><label class="field-label">New branch name</label><input class="field-input" id="dialog-branch" /></div>
+      <div><label class="field-label">Clone directory</label><input class="field-input" id="dialog-dir" /></div>
+    </div>
+    <div class="field-group"><label class="field-label">PR title</label><input class="field-input" id="dialog-pr-title" placeholder="e.g. Cherry-pick fixes from main into release/2.x" /></div>
+    <div class="field-group"><label class="field-label" id="dialog-desc-label">PR description</label><textarea class="field-textarea" id="dialog-pr-desc" rows="6"></textarea></div>
+    <div class="script-header">
+      <span class="field-label" style="margin:0">Shell script</span>
+      <button class="btn-copy" id="dialog-copy">Copy</button>
+    </div>
+    <pre class="script-pre" id="dialog-script"></pre>
+    <div class="dialog-footer"><button class="btn-close-dialog" id="dialog-close2">Close</button></div>`;
+
+  box.querySelector('#dialog-close').addEventListener('click',  closeDialog);
+  box.querySelector('#dialog-close2').addEventListener('click', closeDialog);
+  box.querySelector('#dialog-copy').addEventListener('click', () => {
+    const script = document.getElementById('dialog-script').textContent;
+    navigator.clipboard.writeText(script).then(() => {
+      const btn = document.getElementById('dialog-copy');
+      btn.textContent = '✔ Copied!';
+      btn.style.background = '#14532d'; btn.style.color = '#4ade80'; btn.style.borderColor = '#166534';
+      setTimeout(() => {
+        btn.textContent = 'Copy';
+        btn.style.background = ''; btn.style.color = ''; btn.style.borderColor = '';
+      }, 2000);
+    });
+  });
+
+  ['dialog-branch', 'dialog-dir'].forEach(id => {
+    document.addEventListener('input', e => { if (e.target.id === id) updateDialogScript(); }, true);
+  });
+
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && dialogSide) closeDialog(); });
+
+  overlay.appendChild(box);
+  return overlay;
+}
+
+function openDialog(side) {
+  dialogSide = side;
+  const srcPanel = panels[side];
+  const tgtPanel = panels[side === 'left' ? 'right' : 'left'];
+  const sel      = selected[side];
+  const srcColor = side === 'left' ? '#fbbf24' : '#67e8f9';
+  const tgtColor = side === 'left' ? '#67e8f9' : '#fbbf24';
+
+  // Title & subtitle
+  document.getElementById('dialog-title').textContent =
+    `🍒 Cherry-pick ${sel.size} commit${sel.size !== 1 ? 's' : ''}`;
+  document.getElementById('dialog-subtitle').innerHTML =
+    `From <strong style="color:${srcColor}">${srcPanel.org}/${srcPanel.repo}:${srcPanel.branch}</strong>` +
+    ` → new branch based on <strong style="color:${tgtColor}">${tgtPanel.org}/${tgtPanel.repo}:${tgtPanel.branch}</strong>`;
+
+  // Commits preview (oldest first)
+  const orderedCommits = [...srcPanel.commits.filter(c => sel.has(c.sha))].reverse();
+  const preview = document.getElementById('dialog-commits-preview');
+  preview.innerHTML = '';
+  orderedCommits.forEach(c => {
+    const row = document.createElement('div');
+    row.className = 'preview-row';
+    row.innerHTML = `<span style="font-family:monospace;color:#475569;flex-shrink:0">${c.sha.slice(0,7)}</span>
+      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.title}</span>`;
+    preview.appendChild(row);
+  });
+
+  // Defaults
+  const isWin = navigator.userAgent.includes('Windows') || navigator.platform.startsWith('Win');
+  document.getElementById('dialog-branch').value = `${app.username || 'cherry-pick'}/cherry-pick`;
+  document.getElementById('dialog-dir').value    = isWin ? '%TEMP%' : '/tmp';
+  document.getElementById('dialog-pr-title').value = '';
+
+  // Fetch PR template from target repo
+  const descEl  = document.getElementById('dialog-pr-desc');
+  const descLbl = document.getElementById('dialog-desc-label');
+  descEl.value = '';
+  if (tgtPanel.org && tgtPanel.repo) {
+    descLbl.innerHTML = 'PR description <span style="font-weight:400;color:#475569;text-transform:none;letter-spacing:0"> — loading template…</span>';
+    ghGet(app.token, `/repos/${tgtPanel.org}/${tgtPanel.repo}/contents/.github/pull_request_template.md`)
+      .then(data => {
+        if (data.content) descEl.value = atob(data.content.replace(/\s/g, ''));
+        descLbl.textContent = 'PR description';
+      })
+      .catch(() => { descLbl.textContent = 'PR description'; });
+  }
+
+  // Copy button reset
+  const copyBtn = document.getElementById('dialog-copy');
+  copyBtn.textContent = 'Copy'; copyBtn.style.cssText = '';
+  Object.assign(copyBtn.style, {
+    padding:'5px 14px', borderRadius:'6px', fontSize:'12px', cursor:'pointer',
+    border:'1px solid #334155', background:'#0f172a', color:'#94a3b8', marginLeft:'auto',
+  });
+
+  document.getElementById('dialog-overlay').style.display = 'flex';
+  updateDialogScript();
+}
+
+function updateDialogScript() {
+  if (!dialogSide) return;
+  const srcPanel = panels[dialogSide];
+  const tgtPanel = panels[dialogSide === 'left' ? 'right' : 'left'];
+  const sel      = selected[dialogSide];
+  const commits  = [...srcPanel.commits.filter(c => sel.has(c.sha))].reverse();
+  const branch   = document.getElementById('dialog-branch')?.value || 'cherry-pick/new-branch';
+  const dir      = document.getElementById('dialog-dir')?.value    || '/tmp';
+  const repoDir  = `${dir}/${tgtPanel.repo}`;
+  const shas     = commits.map(c => c.sha).join(' \\\n  ');
+
+  const script = [
+    `#!/bin/bash`,
+    ``,
+    `# Cherry-pick from ${srcPanel.org}/${srcPanel.repo} (${srcPanel.branch})`,
+    `# into a new branch based on ${tgtPanel.org}/${tgtPanel.repo} (${tgtPanel.branch})`,
+    ``,
+    `CLONE_DIR="${dir}"`,
+    `NEW_BRANCH="${branch}"`,
+    ``,
+    `echo "Cloning ${tgtPanel.org}/${tgtPanel.repo}..."`,
+    `git clone "https://github.com/${tgtPanel.org}/${tgtPanel.repo}.git" "${repoDir}"`,
+    `cd "${repoDir}"`,
+    ``,
+    `echo "Checking out ${tgtPanel.branch}..."`,
+    `git checkout "${tgtPanel.branch}"`,
+    ``,
+    `echo "Creating new branch $NEW_BRANCH..."`,
+    `git checkout -b "$NEW_BRANCH"`,
+    ``,
+    `echo "Cherry-picking ${commits.length} commit(s) (oldest first)..."`,
+    `git cherry-pick \\`,
+    `  ${shas}`,
+    ``,
+    `echo ""`,
+    `echo "✔ Done! Branch $NEW_BRANCH is ready in: ${repoDir}"`,
+    `echo "If there were no conflicts, push with:"`,
+    `echo "  git push origin $NEW_BRANCH"`,
+  ].join('\n');
+
+  const scriptEl = document.getElementById('dialog-script');
+  if (scriptEl) scriptEl.textContent = script;
+}
+
+function closeDialog() {
+  dialogSide = null;
+  const overlay = document.getElementById('dialog-overlay');
+  if (overlay) overlay.style.display = 'none';
+}
+
+/* ── Init ───────────────────────────────────────────────────────────────── */
+function init() {
+  const root = document.getElementById('app');
+  const saved = localStorage.getItem(PAT_KEY);
+  if (saved) {
+    root.innerHTML = '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;color:#475569;font-size:14px">Connecting…</div>';
+    connectWithToken(saved).catch(() => {
+      localStorage.removeItem(PAT_KEY);
+      root.innerHTML = ''; root.appendChild(buildTokenScreen());
+    });
+  } else {
+    root.appendChild(buildTokenScreen());
+  }
+}
+
+init();
+</script>
+</body>
+</html>

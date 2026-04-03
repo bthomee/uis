@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bart's UIs</title>
+  <link rel="icon" href="favicon.svg" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'BlinkMacSystemFont', 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 48px 24px;
+      color: #1f2937;
+    }
+
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 48px;
+    }
+
+    header h1 {
+      font-size: 2.6rem;
+      font-weight: 800;
+      color: #fff;
+      letter-spacing: -0.5px;
+      margin-bottom: 10px;
+      text-shadow: 0 2px 12px rgba(0,0,0,0.18);
+    }
+
+    header p {
+      font-size: 1.05rem;
+      color: rgba(255,255,255,0.82);
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 24px;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 14px;
+      padding: 32px 28px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.13);
+      text-decoration: none;
+      color: inherit;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      transition: transform 0.18s ease, box-shadow 0.18s ease;
+    }
+
+    .card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 10px 36px rgba(0,0,0,0.2);
+    }
+
+    .card-icon {
+      font-size: 2rem;
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+
+    .card-title {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: #1f2937;
+    }
+
+    .card-description {
+      font-size: 0.9rem;
+      color: #6b7280;
+      line-height: 1.55;
+    }
+
+    .card-tag {
+      display: inline-block;
+      margin-top: 6px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #7c3aed;
+      background: #ede9fe;
+      border-radius: 999px;
+      padding: 3px 10px;
+      align-self: flex-start;
+    }
+
+    footer {
+      text-align: center;
+      margin-top: 56px;
+      font-size: 0.85rem;
+      color: rgba(255,255,255,0.6);
+    }
+
+    footer a {
+      color: rgba(255,255,255,0.85);
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🛠 Bart's UIs</h1>
+      <p>A collection of browser-based tools — no installation required.</p>
+    </header>
+
+    <div class="cards">
+
+      <a class="card" href="branch-compare.html">
+        <div class="card-icon">🔀</div>
+        <div class="card-title">Git Branch Comparator</div>
+        <div class="card-description">
+          Side-by-side commit comparison across any two branches, repositories, or organizations.
+          Instantly see which commits are shared, missing, or unique to each branch.
+        </div>
+        <span class="card-tag">GitHub</span>
+      </a>
+
+    </div>
+
+    <footer>
+      <p>All tools run entirely in your browser &mdash; no data is sent to any server.</p>
+      <p style="margin-top: 6px;">
+        <a href="https://github.com/bthomee/uis" target="_blank" rel="noopener">github.com/bthomee/uis</a>
+      </p>
+    </footer>
+  </div>
+</body>
+</html>
