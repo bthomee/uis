@@ -227,6 +227,10 @@ const panels  = { left: mkPanel(), right: mkPanel() };
 const selected = { left: new Set(), right: new Set() };
 let   dialogSide = null;
 
+/* Classification state: sha → { color, matchSha } */
+let lastLeftStatus  = new Map();
+let lastRightStatus = new Map();
+
 /* DOM refs – populated when rendering */
 const ui = {};      // top-level elements
 const pui = {};     // per-panel UI elements: pui.left.orgCombo, etc.
@@ -352,6 +356,7 @@ function disconnect(forget) {
   app.token = ''; app.username = ''; app.orgs = [];
   panels.left = mkPanel(); panels.right = mkPanel();
   selected.left.clear(); selected.right.clear(); dialogSide = null;
+  lastLeftStatus = new Map(); lastRightStatus = new Map();
   if (forget) { localStorage.removeItem(PAT_KEY); }
   const root = document.getElementById('app');
   root.innerHTML = '';
@@ -403,11 +408,11 @@ function showMain() {
   stats.style.display = 'none';
   stats.id = 'stats-bar';
   [
-    { id: 'stat-shared',  label: 'Shared commits', color: '#4ade80' },
-    { id: 'stat-onlyL',   label: 'Only in A',      color: '#fbbf24' },
-    { id: 'stat-onlyR',   label: 'Only in B',      color: '#67e8f9' },
-    { id: 'stat-totalL',  label: 'Total in A',     color: '#94a3b8' },
-    { id: 'stat-totalR',  label: 'Total in B',     color: '#94a3b8' },
+    { id: 'stat-shared', label: 'In both',    color: '#4ade80' },
+    { id: 'stat-onlyL',  label: 'Only in A',  color: '#fbbf24' },
+    { id: 'stat-onlyR',  label: 'Only in B',  color: '#67e8f9' },
+    { id: 'stat-totalL', label: 'Total in A', color: '#94a3b8' },
+    { id: 'stat-totalR', label: 'Total in B', color: '#94a3b8' },
   ].forEach(s => {
     const cell = document.createElement('div');
     cell.className = 'stat-cell';
@@ -533,6 +538,7 @@ function clearPanel(side) {
   selected[side].clear();
   u.repoCombo.setValue(''); u.repoCombo.setOptions([]); u.repoCombo.setDisabled(true);
   u.branchCombo.setValue(''); u.branchCombo.setOptions([]); u.branchCombo.setDisabled(true);
+  lastLeftStatus = new Map(); lastRightStatus = new Map();
   applyPanelStatus(side); applyPanelLabel(side); renderBothCommitLists();
 }
 function clearBranchAndCommits(side) {
@@ -540,10 +546,12 @@ function clearBranchAndCommits(side) {
   p.branch = ''; p.branches = []; p.commits = []; p.busy = ''; p.err = '';
   selected[side].clear();
   u.branchCombo.setValue(''); u.branchCombo.setOptions([]); u.branchCombo.setDisabled(true);
+  lastLeftStatus = new Map(); lastRightStatus = new Map();
   applyPanelStatus(side); applyPanelLabel(side); renderBothCommitLists();
 }
 function clearCommits(side) {
   panels[side].commits = []; selected[side].clear();
+  lastLeftStatus = new Map(); lastRightStatus = new Map();
   applyPanelLabel(side); renderBothCommitLists();
 }
 
@@ -574,21 +582,59 @@ function applyPanelLabel(side) {
 /* ── Commit list rendering ──────────────────────────────────────────────── */
 const cardEls = { left: [], right: [] };
 
+/* ── Classification ─────────────────────────────────────────────────────── */
+// Strip trailing PR-number suffix: "Fix bug (#1234)" → "Fix bug"
+const normTitle = t => t.replace(/(\s*\(#\d+\))+\s*$/, '').trim();
+
+function classifyCommits() {
+  const lc = panels.left.commits;
+  const rc = panels.right.commits;
+
+  // Build first-occurrence title maps (commits arrive newest-first, so first = most recent)
+  const leftByTitle = new Map();
+  for (const c of lc) {
+    const key = normTitle(c.title);
+    if (key && !leftByTitle.has(key)) leftByTitle.set(key, c);
+  }
+  const rightByTitle = new Map();
+  for (const c of rc) {
+    const key = normTitle(c.title);
+    if (key && !rightByTitle.has(key)) rightByTitle.set(key, c);
+  }
+
+  lastLeftStatus = new Map();
+  for (const c of lc) {
+    const match = rightByTitle.get(normTitle(c.title));
+    lastLeftStatus.set(c.sha, match
+      ? { color: '#4ade80', matchSha: match.sha }
+      : { color: '#fbbf24', matchSha: null });
+  }
+
+  lastRightStatus = new Map();
+  for (const c of rc) {
+    const match = leftByTitle.get(normTitle(c.title));
+    lastRightStatus.set(c.sha, match
+      ? { color: '#4ade80', matchSha: match.sha }
+      : { color: '#67e8f9', matchSha: null });
+  }
+}
+
 function renderBothCommitLists() {
   const lp = panels.left, rp = panels.right;
-  const rightTitles = new Set(rp.commits.map(c => c.title));
-  const leftTitles  = new Set(lp.commits.map(c => c.title));
   const hasAny = lp.commits.length > 0 || rp.commits.length > 0;
 
-  cardEls.left  = renderCommitCol('left',  ui.leftCol,  rightTitles, leftTitles);
-  cardEls.right = renderCommitCol('right', ui.rightCol, leftTitles,  rightTitles);
+  classifyCommits();
+
+  cardEls.left  = renderCommitCol('left',  ui.leftCol,  lastLeftStatus);
+  cardEls.right = renderCommitCol('right', ui.rightCol, lastRightStatus);
 
   /* Stats bar */
   if (lp.commits.length > 0 && rp.commits.length > 0) {
     ui.statsBar.style.display = 'flex';
-    document.getElementById('stat-shared').textContent = lp.commits.filter(c => rightTitles.has(c.title)).length;
-    document.getElementById('stat-onlyL').textContent  = lp.commits.filter(c => !rightTitles.has(c.title)).length;
-    document.getElementById('stat-onlyR').textContent  = rp.commits.filter(c => !leftTitles.has(c.title)).length;
+    const sharedCount = [...lastLeftStatus.values()].filter(s => s.matchSha).length;
+    document.getElementById('stat-shared').textContent = sharedCount;
+    document.getElementById('stat-onlyL').textContent  = lp.commits.length - sharedCount;
+    document.getElementById('stat-onlyR').textContent  = [...lastRightStatus.values()].filter(s => !s.matchSha).length;
     document.getElementById('stat-totalL').textContent = lp.commits.length;
     document.getElementById('stat-totalR').textContent = rp.commits.length;
   } else {
@@ -601,13 +647,13 @@ function renderBothCommitLists() {
   recalcSVG();
 }
 
-function renderCommitCol(side, col, matchTitles, ownTitles) {
+function renderCommitCol(side, col, statusMap) {
   col.innerHTML = '';
   const commits = panels[side].commits;
   const els = [];
   commits.forEach(commit => {
-    const inOther = matchTitles.has(commit.title);
-    const color   = inOther ? '#4ade80' : (side === 'left' ? '#fbbf24' : '#67e8f9');
+    const st    = statusMap.get(commit.sha) || { symbol: null, color: '#475569', matchSha: null };
+    const color = st.color;
     const isSel   = selected[side].has(commit.sha);
 
     const card = document.createElement('div');
@@ -713,11 +759,13 @@ function recalcSVG() {
   [...ui.svg.querySelectorAll('path')].forEach(p => p.remove());
   if (!lCommits.length || !rCommits.length) { ui.svg.style.height = '0'; return; }
 
-  const cRect   = ui.area.getBoundingClientRect();
-  const rTitles = new Map(rCommits.map((c, i) => [c.title, i]));
+  const cRect    = ui.area.getBoundingClientRect();
+  const rIdxBySha = new Map(rCommits.map((c, i) => [c.sha, i]));
 
   lCommits.forEach((lc, li) => {
-    const ri = rTitles.get(lc.title);
+    const st = lastLeftStatus.get(lc.sha);
+    if (!st || !st.matchSha) return;
+    const ri = rIdxBySha.get(st.matchSha);
     if (ri === undefined) return;
     const lEl = cardEls.left[li];
     const rEl = cardEls.right[ri];
@@ -728,7 +776,9 @@ function recalcSVG() {
     const x2 = rR.left  - cRect.left,  y2 = rR.top + rR.height / 2 - cRect.top;
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     path.setAttribute('d', `M ${x1},${y1} C ${x1+35},${y1} ${x2-35},${y2} ${x2},${y2}`);
-    path.setAttribute('stroke', 'url(#lg)'); path.setAttribute('stroke-width', '1.5'); path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', 'url(#lg)');
+    path.setAttribute('stroke-width', '1.5');
+    path.setAttribute('fill', 'none');
     ui.svg.appendChild(path);
   });
 
