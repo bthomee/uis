@@ -1,0 +1,266 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   gh-common.css - shared design tokens and components for Bart's UIs.
+
+   Loaded by every dashboard before its own <style> block. Anything that both
+   dashboards render the same way lives here; anything page-specific stays in
+   the page. Colours are declared once as custom properties so a palette change
+   is one edit rather than a copy-paste sweep across files.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* Surfaces and text */
+  --bg:         #0f172a;
+  --surface:    #1e293b;
+  --surface-hi: #22304a;
+  --surface-alt:#172033;
+  --border:     #334155;
+  --border-hi:  #475569;
+  /* Every text tone clears WCAG AA (4.5:1) against BOTH the page background
+     and the lighter panel background. The old --text-mute was 3.75:1 and
+     --text-faint only 2.36:1, which is what made PR numbers and timestamps
+     hard to read. Measured ratios are in the comments. */
+  --text:       #e2e8f0;   /* 14.5 page / 11.9 panel */
+  --text-soft:  #cbd5e1;   /* 12.0 / 9.9  */
+  --text-dim:   #b6c2d2;   /*  9.9 / 8.1  */
+  --text-mute:  #9fadc0;   /*  7.8 / 6.4  */
+  --text-faint: #8b99ad;   /*  6.2 / 5.1  */
+  /* Non-text only: separators and disabled outlines, never used for copy. */
+  --line-soft:  #475569;
+
+  /* Accent and status */
+  --accent:       #818cf8;
+  --accent-solid: #6366f1;
+  --accent-deep:  #4f46e5;
+  --accent-dark:  #312e81;
+  --accent-pale:  #a5b4fc;
+  --ok:      #4ade80;
+  --ok-dim:  #34d399;
+  --warn:    #fbbf24;
+  --info:    #67e8f9;
+  --danger:  #f87171;
+  --merged:  #a78bfa;
+
+  /* Shape */
+  --radius-sm: 6px;
+  --radius:    8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+
+  --mono: 'SFMono-Regular', Consolas, monospace;
+  --sans: 'Inter', 'Segoe UI', system-ui, sans-serif;
+
+  /* Type scale, in rem so it follows the reader's browser font-size setting
+     rather than overriding it. The root is left at the browser default, so
+     1rem is normally 16px and each value renders as the pixel size in its
+     comment; someone who has set 20px gets everything 25% larger without
+     touching zoom. Change these to rescale both dashboards at once. */
+  --fs-2xs:  0.625rem;    /* 10px at a 16px root */
+  --fs-xs:   0.6875rem;   /* 11 */
+  --fs-sm:   0.75rem;     /* 12 */
+  --fs-md:   0.8125rem;   /* 13 */
+  --fs-base: 0.875rem;    /* 14 */
+  --fs-lg:   0.9375rem;   /* 15 */
+  --fs-xl:   1.125rem;    /* 18 */
+  --fs-2xl:  1.25rem;     /* 20 */
+  --fs-3xl:  1.375rem;    /* 22 */
+  --fs-4xl:  1.5rem;      /* 24 */
+  --fs-5xl:  1.75rem;     /* 28 */
+  --fs-6xl:  2.5rem;      /* 40 */
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* Deliberately not set: the root font size stays at whatever the browser (and
+   therefore the reader) says it is. Every size below is relative to it. */
+html { font-size: 100%; }
+
+body {
+  background: var(--bg);
+  font-family: var(--sans);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+a { color: inherit; }
+
+code {
+  background: var(--accent-dark);
+  color: var(--accent-pale);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size:var(--fs-md);
+  font-family: var(--mono);
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--surface); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-hi); }
+
+@keyframes pulse  { 0%,100% { opacity: 1 } 50% { opacity: 0.4 } }
+@keyframes spin   { to { transform: rotate(360deg) } }
+@keyframes fadeIn { from { opacity: 0; transform: scale(0.97) } to { opacity: 1; transform: scale(1) } }
+
+/* A visible keyboard focus indicator, declared !important on purpose: several
+   controls set `outline:none` inline from JS, and a focus ring is not
+   something a component should be able to opt out of. */
+:focus-visible {
+  outline: 2px solid var(--accent) !important;
+  outline-offset: 1px;
+}
+
+/* ── Token screen ─────────────────────────────────────────────────────────
+   Identical across dashboards; only the icon, title and one-line blurb vary,
+   and those are injected by gh-common.js.                                  */
+.token-screen { display:flex; align-items:center; justify-content:center; min-height:100vh; padding:20px; }
+.token-box    { width:100%; max-width:33.75rem; padding:40px; background:var(--surface); border-radius:var(--radius-xl); border:1px solid var(--border); }
+.token-box h1 { font-size:var(--fs-3xl); font-weight:700; color:var(--accent); margin-bottom:10px; }
+.token-box p  { font-size:var(--fs-base); color:var(--text-mute); line-height:1.6; margin-bottom:12px; }
+.token-icon   { font-size:var(--fs-5xl); margin-bottom:8px; }
+.token-row    { display:flex; gap:8px; margin:20px 0 12px; }
+.token-input  { flex:1; padding:11px 14px; border-radius:var(--radius); border:1px solid var(--border); background:var(--bg); color:var(--text); font-size:var(--fs-lg); }
+.token-input:focus { border-color: var(--accent-solid); }
+.btn-connect  { padding:11px 22px; border-radius:var(--radius); border:none; background:var(--accent-solid); color:#fff; font-size:var(--fs-lg); font-weight:600; cursor:pointer; white-space:nowrap; }
+.btn-connect:hover:not(:disabled) { background: var(--accent-deep); }
+.btn-connect:disabled { background: var(--accent-dark); cursor:not-allowed; }
+.err-text     { color: var(--danger); font-size:var(--fs-base); line-height:1.5; }
+.check-row    { display:flex; align-items:center; gap:8px; font-size:var(--fs-md); color:var(--text-mute); margin-bottom:4px; }
+.check-row input { width:0.9em; height:0.9em; cursor:pointer; accent-color: var(--accent-solid); }
+.check-row label { cursor:pointer; }
+.scope-note   { font-size:var(--fs-sm); color:var(--text-faint); margin:6px 0 12px; line-height:1.6; }
+
+/* ── Utilities ────────────────────────────────────────────────────────────
+   A small set of single-purpose classes, so that no element in this suite
+   needs a `style` attribute.
+
+   That is what lets the Content-Security-Policy drop `style-src
+   'unsafe-inline'`. A hash can cover a `<style>` block, but nothing covers a
+   style attribute in markup, so as long as one exists anywhere the policy has
+   to allow all of them. Values that genuinely vary at runtime (a label's own
+   colour, a status colour) are written through `element.style`, which is the
+   CSSOM rather than markup and is not restricted by the policy at all.       */
+.grow         { flex: 1; }
+.m0           { margin: 0; }
+.mb-sm        { margin-bottom: 8px; }
+.no-underline { text-decoration: none; }
+.t-dim        { color: var(--text-dim); }
+.t-mute       { color: var(--text-mute); }
+.t-faint      { color: var(--text-faint); }
+.header-icon  { font-size: var(--fs-2xl); }
+
+/* A centred one-line explanation where a table or a list would otherwise be. */
+.pad-note          { padding: 26px; text-align: center; font-size: var(--fs-base); color: var(--text-faint); }
+.pad-note.is-info  { padding: 22px; color: var(--text-mute); }
+
+/* Shown while the token is being checked, before any board can be drawn. */
+.connecting-splash { min-height:100vh; display:flex; align-items:center; justify-content:center;
+                     color:var(--text-faint); font-size:var(--fs-lg); }
+
+/* ── Shell ────────────────────────────────────────────────────────────────
+   Pages set their own max-width on .main.                                  */
+.main    { padding: 20px 24px 60px; margin: 0 auto; }
+.header  { display:flex; align-items:center; gap:12px; margin-bottom:18px; flex-wrap:wrap; }
+.header h1 { font-size:var(--fs-2xl); font-weight:700; color: var(--accent); }
+.divider { width:1px; height:1em; background: var(--border); }
+.muted   { font-size:var(--fs-md); color: var(--text-faint); }
+
+.btn-sm  { padding:5px 12px; border-radius:var(--radius-sm); border:1px solid var(--border); background:transparent; color:var(--text-mute); font-size:var(--fs-md); cursor:pointer; white-space:nowrap; }
+.btn-sm:hover:not(:disabled) { color: var(--text-dim); border-color: var(--border-hi); }
+.btn-sm:disabled { opacity:0.45; cursor:not-allowed; }
+
+.btn-primary { padding:6px 16px; border-radius:7px; border:1px solid var(--accent-solid); background:var(--accent-solid); color:#fff; font-size:var(--fs-md); font-weight:600; cursor:pointer; white-space:nowrap; }
+.btn-primary:hover:not(:disabled) { background: var(--accent-deep); }
+.btn-primary:disabled { background: var(--accent-dark); border-color: var(--accent-dark); cursor:not-allowed; }
+
+/* ── Panels ───────────────────────────────────────────────────────────── */
+.panel       { background:var(--surface); border-radius:var(--radius-lg); border:1px solid var(--border); padding:16px; margin-bottom:16px; }
+.panel-head  { display:flex; align-items:center; gap:10px; margin-bottom:12px; flex-wrap:wrap; }
+.panel-label { font-size:var(--fs-sm); font-weight:700; letter-spacing:0.09em; text-transform:uppercase; color:var(--text-mute); }
+
+/* ── Stats bar ─────────────────────────────────────────────────────────── */
+.stats-bar { display:flex; margin-bottom:16px; background:var(--surface); border-radius:10px; border:1px solid var(--border); overflow:hidden; flex-wrap:wrap; }
+.stat-cell { flex:1; min-width:6.875rem; padding:12px 16px; border-right:1px solid var(--border); }
+.stat-cell:last-child { border-right:none; }
+.stat-val  { font-size:var(--fs-4xl); font-weight:700; }
+.stat-lbl  { font-size:var(--fs-sm); color:var(--text-mute); margin-top:3px; }
+
+/* ── Feedback ──────────────────────────────────────────────────────────── */
+.empty-state         { text-align:center; padding:60px 20px; color:var(--text-faint); }
+.empty-state .icon   { font-size:var(--fs-6xl); margin-bottom:12px; }
+.empty-state .title  { font-size:var(--fs-lg); color:var(--text-dim); margin-bottom:6px; font-weight:600; }
+.empty-state .sub    { font-size:var(--fs-base); line-height:1.6; max-width:28.75rem; margin:0 auto; }
+
+.err-banner { background:rgba(248,113,113,0.08); border:1px solid rgba(248,113,113,0.3); border-radius:10px; padding:11px 14px; margin-bottom:14px; font-size:var(--fs-md); color:#fca5a5; line-height:1.6; }
+.err-banner strong { color: var(--danger); }
+
+.spinner   { display:inline-block; width:0.85em; height:0.85em; border:2px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin 0.7s linear infinite; }
+.pulse-dot { display:inline-block; width:0.55em; height:0.55em; border-radius:50%; background:var(--accent); opacity:0.7; animation:pulse 1s infinite; flex-shrink:0; }
+
+.toast { position:fixed; bottom:22px; left:50%; transform:translateX(-50%); background:var(--surface); border:1px solid var(--border); color:var(--text-soft); font-size:var(--fs-base); padding:10px 20px; border-radius:9px; box-shadow:0 10px 30px rgba(0,0,0,0.6); z-index:2000; max-width:min(92vw,35rem); }
+
+/* ── Token field ───────────────────────────────────────────────────────────
+   One control for every "type a value, it becomes a removable chip" input:
+   the filter bar and the ignored-reviewer list are the same interaction and
+   should not look like two different widgets.
+
+   The box is only ever a box for typing into. Entered values sit beside it as
+   chips and wrap underneath when the row runs out of room, so the caret never
+   moves around as chips are added and removed.
+
+   Set --token-field-bg where the default would disappear into its container. */
+.gh-tokens {
+  display:flex; flex-wrap:wrap; align-items:center; gap:8px;
+  min-width:0;
+}
+
+.gh-token-inputwrap { position:relative; display:flex; flex:0 1 24rem; min-width:11rem; }
+.gh-token-input {
+  flex:1; min-width:0;
+  padding:8px 11px;
+  border-radius:var(--radius);
+  border:1px solid var(--border);
+  background:var(--token-field-bg, var(--bg));
+  color:var(--text);
+  font-family:var(--sans); font-size:var(--fs-md);
+}
+.gh-token-input:focus      { border-color:var(--accent-solid); }
+.gh-token-input.is-invalid { border-color:var(--danger); }
+.gh-token-input::placeholder { color:var(--text-faint); }
+
+.gh-token {
+  display:inline-flex; align-items:center; gap:6px;
+  font-size:var(--fs-sm); font-family:var(--mono);
+  padding:3px 9px 3px 5px;
+  border-radius:999px; border:1px solid transparent;
+  max-width:100%;
+}
+.gh-token > span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.gh-token-x {
+  border:none; background:transparent; cursor:pointer;
+  font-size:var(--fs-base); line-height:1; padding:0 2px;
+  border-radius:50%; flex-shrink:0;
+}
+/* Two tones: one adds to what is shown, the other subtracts from it. */
+.gh-token.is-include   { background:rgba(129,140,248,0.10); border-color:rgba(129,140,248,0.32); color:#c7d2fe; }
+.gh-token.is-include .gh-token-x { color:var(--accent); }
+.gh-token.is-include .gh-token-x:hover { color:#fff; background:rgba(129,140,248,0.35); }
+.gh-token.is-exclude   { background:rgba(148,163,184,0.10); border-color:rgba(148,163,184,0.30); color:var(--text-dim); }
+.gh-token.is-exclude .gh-token-x { color:var(--text-mute); }
+.gh-token.is-exclude .gh-token-x:hover { color:#fff; background:rgba(148,163,184,0.35); }
+
+/* ── Combobox (built by gh-common.js) ──────────────────────────────────── */
+.gh-combo         { position:relative; flex:1; min-width:0; }
+.gh-combo-input   { width:100%; padding:8px 11px; border-radius:7px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:var(--fs-base); font-family:var(--mono); transition:border-color 0.15s; }
+.gh-combo-input:focus { border-color: var(--accent-solid); }
+.gh-combo-input:disabled { background:var(--bg); color:var(--text-faint); }
+.gh-combo-list    { position:absolute; top:calc(100% + 3px); left:0; right:0; z-index:9999; margin:0; padding:0; list-style:none; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); max-height:14.375rem; overflow-y:auto; box-shadow:0 10px 30px rgba(0,0,0,0.6); display:none; }
+.gh-combo-opt     { padding:8px 12px; cursor:pointer; font-size:var(--fs-base); font-family:var(--mono); color:var(--text-soft); border-bottom:1px solid var(--bg); }
+.gh-combo-opt:last-child { border-bottom:none; }
+.gh-combo-opt[aria-selected="true"] { color:var(--accent); font-weight:600; }
+.gh-combo-opt.active, .gh-combo-opt:hover { background: var(--border); color:#fff; }
+
+@media (max-width: 51.25em) {
+  .main   { padding: 16px 12px 40px; }
+  .header { gap: 8px; }
+  .token-box { padding: 28px 22px; }
+}

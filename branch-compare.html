@@ -5,227 +5,128 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Git Branch Comparator</title>
   <link rel="icon" href="favicon.svg" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; connect-src https://api.github.com; img-src 'self' data:; style-src 'self' 'sha256-61uXz3NjRolcLg+Py26UBbaqLlH65q1zFHkilyExTjg='; script-src 'self' 'sha256-i1lHNewgrGGx49/kVODM5YCNN3al+VxtkeozEGBXjLg='; base-uri 'none'; form-action 'none'" />
+  <link rel="stylesheet" href="gh-common.css" />
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: #0f172a; font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; color: #e2e8f0; min-height: 100vh; }
-    ::-webkit-scrollbar { width: 6px; height: 6px; }
-    ::-webkit-scrollbar-track { background: #1e293b; }
-    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
-    ::-webkit-scrollbar-thumb:hover { background: #475569; }
-    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
-    @keyframes fadeIn { from{opacity:0;transform:scale(0.97)} to{opacity:1;transform:scale(1)} }
+    /* Page-specific. Tokens, shell, buttons, stats, token screen and the
+       Combobox all come from gh-common.css. */
+    .main { max-width: 100rem; }
+    .legend { display:flex; gap:14px; font-size:var(--fs-md); color:var(--text-dim); align-items:center; flex-wrap:wrap; }
 
-    .token-screen { display:flex; align-items:center; justify-content:center; min-height:100vh; padding:20px; }
-    .token-box { width:100%; max-width:480px; padding:40px; background:#1e293b; border-radius:16px; border:1px solid #334155; }
-    .token-box h1 { font-size:22px; font-weight:700; color:#818cf8; margin-bottom:10px; }
-    .token-box p { font-size:13px; color:#64748b; line-height:1.6; margin-bottom:12px; }
-    .token-row { display:flex; gap:8px; margin-bottom:12px; }
-    .token-input { flex:1; padding:11px 14px; border-radius:8px; border:1px solid #334155; background:#0f172a; color:#e2e8f0; font-size:14px; outline:none; }
-    .btn-connect { padding:11px 22px; border-radius:8px; border:none; background:#6366f1; color:#fff; font-size:14px; font-weight:600; cursor:pointer; white-space:nowrap; }
-    .btn-connect:disabled { background:#312e81; cursor:not-allowed; }
-    .err-text { color:#f87171; font-size:13px; }
-    code { background:#312e81; color:#a5b4fc; padding:1px 6px; border-radius:4px; font-size:12px; }
-
-    .main { padding:20px 24px; }
-    .header { display:flex; align-items:center; gap:12px; margin-bottom:20px; flex-wrap:wrap; }
-    .header h1 { font-size:18px; font-weight:700; color:#818cf8; }
-    .legend { display:flex; gap:14px; font-size:12px; color:#94a3b8; align-items:center; }
-    .divider { width:1px; height:16px; background:#334155; }
-    .btn-sm { padding:5px 12px; border-radius:6px; border:1px solid #334155; background:transparent; color:#64748b; font-size:12px; cursor:pointer; }
-    .btn-sm:hover { color:#94a3b8; border-color:#475569; }
+    /* The legend dots, and the two labels that used to carry style attributes.
+       These hexes are the CSS mirror of MATCH_COLOR and SIDE_COLOR in the
+       script; change them together. */
+    .dot-both    { color:#4ade80; }
+    .dot-only-a  { color:#fbbf24; }
+    .dot-only-b  { color:#67e8f9; }
+    .empty-lead  { font-size:var(--fs-lg); color:var(--text-faint); }
+    .label-note  { font-weight:400; color:var(--text-faint); text-transform:none; letter-spacing:0; }
 
     .selectors-grid { display:grid; grid-template-columns:1fr auto 1fr; gap:12px; margin-bottom:16px; align-items:center; }
-    .selector-panel { background:#1e293b; border-radius:12px; padding:16px; border:1px solid #334155; }
-    .panel-label { font-size:11px; font-weight:700; letter-spacing:0.09em; text-transform:uppercase; margin-bottom:12px; }
+    .selector-panel { background:var(--surface); border-radius:var(--radius-lg); padding:16px; border:1px solid var(--border); }
+    .selector-panel .panel-label { margin-bottom:12px; }
     .panel-inputs { display:flex; gap:8px; }
-    .panel-status { margin-top:8px; font-size:12px; display:flex; align-items:center; gap:6px; }
-    .pulse-dot { display:inline-block; width:8px; height:8px; border-radius:50%; opacity:0.7; animation:pulse 1s infinite; }
-    .limit-select { flex-shrink:0; padding:8px 26px 8px 10px; border-radius:7px; border:1px solid #334155; background:#1e293b; color:#94a3b8; font-size:12px; outline:none; cursor:pointer; appearance:none; -webkit-appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2364748b'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 8px center; }
+    .panel-status { margin-top:8px; font-size:var(--fs-md); display:flex; align-items:center; gap:6px; }
+    .vs-mark { text-align:center; color:var(--text-faint); font-size:var(--fs-base); font-weight:600; padding:0 8px; }
+    .limit-select { flex-shrink:0; padding:8px 26px 8px 10px; border-radius:7px; border:1px solid var(--border); background:var(--surface); color:var(--text-dim); font-size:var(--fs-md); cursor:pointer; appearance:none; -webkit-appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2364748b'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 8px center; }
+    .limit-select:focus { border-color: var(--accent-solid); }
 
-    .stats-bar { display:flex; margin-bottom:16px; background:#1e293b; border-radius:10px; border:1px solid #334155; overflow:hidden; }
-    .stat-cell { flex:1; padding:12px 16px; border-right:1px solid #334155; }
-    .stat-cell:last-child { border-right:none; }
-    .stat-val { font-size:20px; font-weight:700; }
-    .stat-lbl { font-size:11px; color:#64748b; margin-top:3px; }
-
-    .cherry-row { display:grid; grid-template-columns:1fr 80px 1fr; margin-bottom:4px; }
-    .cherry-side { display:flex; align-items:center; justify-content:flex-end; min-height:30px; }
-    .cherry-count { font-size:12px; color:#64748b; margin-right:auto; }
-    .btn-cherry { padding:6px 14px; border-radius:7px; font-size:12px; font-weight:600; cursor:pointer; transition:all 0.15s; border:1px solid #334155; background:transparent; color:#334155; }
-    .btn-cherry.enabled { cursor:pointer; }
+    .cherry-row { display:grid; grid-template-columns:1fr 5rem 1fr; margin-bottom:4px; }
+    .cherry-side { display:flex; align-items:center; justify-content:flex-end; min-height:1.9rem; }
+    .cherry-count { font-size:var(--fs-md); color:var(--text-mute); margin-right:auto; }
+    .btn-cherry { padding:6px 14px; border-radius:7px; font-size:var(--fs-md); font-weight:600; cursor:pointer; transition:all 0.15s; border:1px solid var(--border); background:transparent; color:var(--border); }
     .btn-cherry:disabled { cursor:not-allowed; }
 
-    .commit-area { position:relative; display:grid; grid-template-columns:1fr 80px 1fr; }
+    .commit-area { position:relative; display:grid; grid-template-columns:1fr 5rem 1fr; }
     .commit-col { z-index:1; }
-    .commit-card { padding:8px 10px; margin-bottom:5px; border-radius:7px; cursor:pointer; display:flex; align-items:flex-start; gap:9px; transition:background 0.12s; }
-    .commit-card input[type=checkbox] { margin-top:3px; flex-shrink:0; cursor:pointer; width:13px; height:13px; }
-    .commit-card .title-link { font-size:13px; font-weight:500; text-decoration:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:block; }
+    /* Every colour a card needs is written once, as custom properties, when the
+       card is built. Hover and selection are then pure CSS state instead of
+       four inline style writes per mouse event and two listeners per card. */
+    .commit-card { padding:8px 10px; margin-bottom:5px; border-radius:7px; cursor:pointer; display:flex; align-items:flex-start; gap:9px; transition:background 0.12s;
+                   background:var(--cc-bg); border:1px solid var(--cc-line); }
+    .commit-card:hover { background:var(--cc-hover); }
+    .commit-card.is-selected { background:var(--cc-sel); border-color:var(--cc-line-sel); }
+    /* The thick edge marks which side the card belongs to, and keeps its own
+       colour when selected. */
+    .commit-col.side-left  .commit-card { border-left-width:3px;  border-left-color:var(--cc); }
+    .commit-col.side-right .commit-card { border-right-width:3px; border-right-color:var(--cc); }
+    .commit-card input[type=checkbox] { margin-top:3px; flex-shrink:0; cursor:pointer; width:0.9em; height:0.9em; accent-color:var(--cc); }
+    .commit-card .title-link { font-size:var(--fs-base); font-weight:500; text-decoration:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:block; }
     .commit-card .title-link:hover { text-decoration:underline; }
-    .commit-card .meta { font-size:11px; color:#64748b; margin-top:3px; display:flex; gap:10px; align-items:center; }
-    .commit-card .sha { font-family:monospace; color:#475569; }
-    .commit-card .ext-link { margin-left:auto; color:#475569; text-decoration:none; font-size:12px; flex-shrink:0; }
-    .commit-card .ext-link:hover { color:#94a3b8; }
+    .commit-card .meta { font-size:var(--fs-sm); color:var(--text-mute); margin-top:3px; display:flex; gap:10px; align-items:center; }
+    .commit-card .sha { font-family:var(--mono); color:var(--text-faint); }
+    .commit-card .ext-link { margin-left:auto; color:var(--text-faint); text-decoration:none; font-size:var(--fs-md); flex-shrink:0; }
+    .commit-card .ext-link:hover { color:var(--text-dim); }
     .commit-svg { position:absolute; top:0; left:0; width:100%; pointer-events:none; z-index:0; overflow:visible; }
-
-    .empty-state { text-align:center; padding:60px 20px; }
-    .empty-state .icon { font-size:40px; margin-bottom:12px; }
+    .trunc-note { font-size:var(--fs-md); color:var(--warn); margin:-4px 0 12px; }
 
     /* Dialog */
     .dialog-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.75); z-index:1000; display:flex; align-items:center; justify-content:center; padding:20px; }
-    .dialog-box { background:#1e293b; border:1px solid #334155; border-radius:14px; width:100%; max-width:720px; max-height:90vh; overflow-y:auto; padding:28px; animation:fadeIn 0.15s ease; }
+    .dialog-box { background:var(--surface); border:1px solid var(--border); border-radius:14px; width:100%; max-width:45rem; max-height:90vh; overflow-y:auto; padding:28px; animation:fadeIn 0.15s ease; }
     .dialog-header { display:flex; align-items:flex-start; margin-bottom:20px; }
-    .dialog-title { font-size:17px; font-weight:700; color:#e2e8f0; }
-    .dialog-subtitle { font-size:12px; color:#64748b; margin-top:5px; line-height:1.6; }
-    .dialog-close { margin-left:auto; background:none; border:none; color:#64748b; font-size:22px; cursor:pointer; line-height:1; padding:0 0 0 16px; }
-    .field-label { font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase; letter-spacing:0.08em; display:block; margin-bottom:6px; }
-    .field-input { width:100%; padding:8px 11px; border-radius:7px; border:1px solid #334155; background:#0f172a; color:#e2e8f0; font-size:13px; outline:none; box-sizing:border-box; }
-    .field-input:focus { border-color:#6366f1; }
-    .field-textarea { width:100%; padding:8px 11px; border-radius:7px; border:1px solid #334155; background:#0f172a; color:#e2e8f0; font-size:13px; outline:none; box-sizing:border-box; resize:vertical; font-family:inherit; line-height:1.55; }
-    .field-textarea:focus { border-color:#6366f1; }
+    .dialog-title { font-size:var(--fs-xl); font-weight:700; color:var(--text); }
+    .dialog-subtitle { font-size:var(--fs-md); color:var(--text-mute); margin-top:5px; line-height:1.6; word-break:break-word; }
+    .dialog-close { margin-left:auto; background:none; border:none; color:var(--text-mute); font-size:var(--fs-3xl); cursor:pointer; line-height:1; padding:0 0 0 16px; }
+    .field-label { font-size:var(--fs-sm); font-weight:700; color:var(--text-mute); text-transform:uppercase; letter-spacing:0.08em; display:block; margin-bottom:6px; }
+    .field-input { width:100%; padding:8px 11px; border-radius:7px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-size:var(--fs-base); }
+    .field-input:focus { border-color:var(--accent-solid); }
+    .field-textarea { width:100%; padding:8px 11px; border-radius:7px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-size:var(--fs-base); resize:vertical; font-family:inherit; line-height:1.55; }
+    .field-textarea:focus { border-color:var(--accent-solid); }
     .two-col { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:16px; }
     .field-group { margin-bottom:16px; }
-    .commits-preview { background:#0f172a; border-radius:8px; padding:10px 14px; max-height:150px; overflow-y:auto; border:1px solid #1e293b; margin-bottom:20px; }
-    .preview-row { font-size:12px; color:#94a3b8; padding:3px 0; display:flex; gap:10px; border-bottom:1px solid #1e293b; }
+    .commits-preview { background:var(--bg); border-radius:var(--radius); padding:10px 14px; max-height:9.375rem; overflow-y:auto; border:1px solid var(--surface); margin-bottom:20px; }
+    .preview-row { font-size:var(--fs-md); color:var(--text-dim); padding:3px 0; display:flex; gap:10px; border-bottom:1px solid var(--surface); }
     .preview-row:last-child { border-bottom:none; }
+    .preview-sha { font-family:var(--mono); color:var(--text-faint); flex-shrink:0; }
+    .preview-title { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .script-header { display:flex; align-items:center; margin-bottom:8px; }
-    .btn-copy { padding:5px 14px; border-radius:6px; font-size:12px; cursor:pointer; transition:all 0.2s; }
-    .script-pre { background:#0f172a; border-radius:8px; padding:12px 16px; font-size:12px; color:#94a3b8; overflow-x:auto; font-family:'SFMono-Regular',Consolas,monospace; line-height:1.65; border:1px solid #334155; white-space:pre; margin-bottom:20px; }
+    .btn-copy { padding:5px 14px; border-radius:var(--radius-sm); font-size:var(--fs-md); cursor:pointer; border:1px solid var(--border); background:var(--bg); color:var(--text-dim); margin-left:auto; }
+    .script-pre { background:var(--bg); border-radius:var(--radius); padding:12px 16px; font-size:var(--fs-md); color:var(--text-dim); overflow-x:auto; font-family:var(--mono); line-height:1.65; border:1px solid var(--border); white-space:pre; margin-bottom:20px; }
     .dialog-footer { display:flex; justify-content:flex-end; }
-    .btn-close-dialog { padding:9px 22px; border-radius:8px; border:1px solid #334155; background:transparent; color:#94a3b8; font-size:13px; cursor:pointer; }
-  </style>
+    .btn-close-dialog { padding:9px 22px; border-radius:var(--radius); border:1px solid var(--border); background:transparent; color:var(--text-dim); font-size:var(--fs-base); cursor:pointer; }
+
+    /* Two side-by-side columns cannot survive a phone. Stack them, and drop
+       the connector lines, which only mean anything side by side. */
+    @media (max-width: 53.75em) {
+      .selectors-grid { grid-template-columns:1fr; }
+      .vs-mark { padding:2px 0; }
+      .panel-inputs { flex-wrap:wrap; }
+      .commit-area { grid-template-columns:1fr; }
+      .commit-svg { display:none; }
+      .cherry-row { grid-template-columns:1fr; gap:8px; }
+      .cherry-side { justify-content:flex-start; }
+      .commit-col + div + .commit-col { margin-top:18px; }
+    }
+    </style>
 </head>
 <body>
 <div id="app"></div>
+<script src="gh-common.js"></script>
 <script>
 
-/* ── GitHub API ─────────────────────────────────────────────────────────── */
-async function ghGet(token, path, params = {}) {
-  const url = new URL('https://api.github.com' + path);
-  Object.entries({ ...params, per_page: 100 }).forEach(([k, v]) => url.searchParams.set(k, String(v)));
-  const r = await fetch(url, {
-    headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github+json' }
-  });
-  if (!r.ok) { const b = await r.json().catch(() => ({})); throw new Error(b.message || `HTTP ${r.status}`); }
-  return r.json();
-}
-async function ghGetAll(token, path, params = {}, maxPages = 10) {
-  const all = [];
-  for (let page = 1; page <= maxPages; page++) {
-    const d = await ghGet(token, path, { ...params, page });
-    all.push(...d);
-    if (d.length < 100) break;
-  }
-  return all;
-}
-
-/* ── Combobox ───────────────────────────────────────────────────────────── */
-class Combobox {
-  constructor({ onChange, placeholder = '', disabled = false } = {}) {
-    this.onChange = onChange;
-    this._options = [];
-    this._value   = '';
-    this._open    = false;
-
-    this.wrap = Object.assign(document.createElement('div'), {
-      style: 'position:relative;flex:1;min-width:0;'
-    });
-
-    this.input = document.createElement('input');
-    Object.assign(this.input.style, {
-      width:'100%', padding:'8px 11px', borderRadius:'7px', border:'1px solid #334155',
-      background: disabled ? '#0f172a' : '#1e293b', color: disabled ? '#475569' : '#e2e8f0',
-      fontSize:'13px', outline:'none', transition:'border-color 0.15s', boxSizing:'border-box',
-    });
-    this.input.placeholder = placeholder;
-    this.input.disabled    = disabled;
-
-    this.dropdown = document.createElement('ul');
-    Object.assign(this.dropdown.style, {
-      position:'absolute', top:'calc(100% + 3px)', left:'0', right:'0', zIndex:'9999',
-      margin:'0', padding:'0', listStyle:'none', background:'#1e293b',
-      border:'1px solid #334155', borderRadius:'8px', maxHeight:'210px', overflowY:'auto',
-      boxShadow:'0 10px 30px rgba(0,0,0,0.6)', display:'none',
-    });
-
-    this.wrap.append(this.input, this.dropdown);
-    this._bind();
-  }
-
-  get el() { return this.wrap; }
-
-  setOptions(opts) { this._options = opts || []; if (this._open) this._render(); }
-  setValue(v)      { this._value = v; this.input.value = v; }
-  setDisabled(d)   {
-    this.input.disabled = d;
-    this.input.style.background = d ? '#0f172a' : '#1e293b';
-    this.input.style.color      = d ? '#475569' : '#e2e8f0';
-    if (d) { this._open = false; this.dropdown.style.display = 'none'; }
-  }
-  setPlaceholder(p) { this.input.placeholder = p; }
-
-  _filtered() {
-    const t = this.input.value.toLowerCase();
-    return t ? this._options.filter(o => o.toLowerCase().includes(t)) : this._options;
-  }
-
-  _render() {
-    this.dropdown.innerHTML = '';
-    const items = this._filtered();
-    if (!items.length || !this._open) { this.dropdown.style.display = 'none'; return; }
-    items.forEach(opt => {
-      const li = document.createElement('li');
-      li.textContent = opt;
-      li.style.cssText = `padding:8px 12px;cursor:pointer;font-size:13px;
-        color:${opt === this._value ? '#818cf8' : '#cbd5e1'};
-        font-weight:${opt === this._value ? '600' : '400'};
-        border-bottom:1px solid #0f172a;`;
-      li.addEventListener('mouseenter', () => li.style.background = '#334155');
-      li.addEventListener('mouseleave', () => li.style.background = 'transparent');
-      li.addEventListener('mousedown',  e => { e.preventDefault(); this._pick(opt); });
-      this.dropdown.appendChild(li);
-    });
-    this.dropdown.style.display = 'block';
-  }
-
-  _pick(opt) {
-    this._value = opt; this.input.value = opt;
-    this._open  = false; this.dropdown.style.display = 'none';
-    this.onChange(opt);
-  }
-
-  _bind() {
-    const open = () => { this._open = true; this._render(); };
-    this.input.addEventListener('focus', open);
-    this.input.addEventListener('click', open);
-    this.input.addEventListener('input', () => {
-      this._open = true; this._render();
-      if (!this.input.value) { this._value = ''; this.onChange(''); }
-    });
-    this.input.addEventListener('keydown', e => {
-      if (e.key === 'Enter')  { const f = this._filtered(); if (f[0]) this._pick(f[0]); }
-      if (e.key === 'Escape') { this._open = false; this.dropdown.style.display = 'none'; }
-    });
-    this.input.addEventListener('focus', () => this.input.style.borderColor = '#6366f1');
-    this.input.addEventListener('blur',  () => this.input.style.borderColor = '#334155');
-    document.addEventListener('mousedown', e => {
-      if (!this.wrap.contains(e.target)) { this._open = false; this.dropdown.style.display = 'none'; }
-    });
-  }
-}
-
 /* ── App state ──────────────────────────────────────────────────────────── */
-const PAT_KEY = 'gh_branch_compare_pat';
-const app = { token: '', username: '', orgs: [] };
-
 const mkPanel = () => ({
   org: '', repo: '', branch: '',
   repos: [], branches: [], commits: [],
-  commitLimit: 500, busy: '', err: '',
+  commitLimit: 500, busy: '', err: '', truncated: false,
   _genRepos: 0, _genBranches: 0, _genCommits: 0,
 });
 const panels  = { left: mkPanel(), right: mkPanel() };
 const selected = { left: new Set(), right: new Set() };
 let   dialogSide = null;
+/* Bumped on every open, so a slow template fetch belonging to a dialog the
+   viewer has already closed cannot write into the one now on screen. */
+let   dialogGen  = 0;
+
+/* One place for the two side colours. They were spelled out at seven call
+   sites, which is seven chances to change six of them. */
+const SIDE_COLOR = { left: '#fbbf24', right: '#67e8f9' };
+const MATCH_COLOR = '#4ade80';
+
+/* "All commits" used to mean 999 pages, up to 99,900 commits and 999 requests
+   per side against a 5,000/hour budget, for a comparison nobody can read. A
+   real cap plus the truncation note is the honest version of the same offer. */
+const MAX_ALL_PAGES = 200;
 
 /* Classification state: sha → { color, matchSha } */
 let lastLeftStatus  = new Map();
@@ -237,130 +138,110 @@ const pui = {};     // per-panel UI elements: pui.left.orgCombo, etc.
 
 /* ── Panel loading ──────────────────────────────────────────────────────── */
 async function loadRepos(side) {
+  /* A cached board can be on screen before sign-in finishes; there is
+     nothing to look up yet and no error worth showing. */
+  if (!app.token) return;
   const p = panels[side], u = pui[side];
   p.repo = ''; p.branch = ''; p.repos = []; p.branches = []; p.commits = [];
   p.busy = 'Loading repositories…'; p.err = '';
   selected[side].clear();
   applyPanelStatus(side);
-  u.repoCombo.setValue(''); u.repoCombo.setOptions([]); u.repoCombo.setDisabled(true);
+  u.repoCombo.setValue(''); u.repoCombo.setOptions([]); u.repoCombo.setDisabled(false);
   u.branchCombo.setValue(''); u.branchCombo.setOptions([]); u.branchCombo.setDisabled(true);
   renderBothCommitLists();
 
   const gen = ++p._genRepos;
   try {
-    const data = p.org === app.username
-      ? await ghGetAll(app.token, '/user/repos', { type: 'all' }, 20)
-      : await ghGetAll(app.token, `/orgs/${p.org}/repos`, { type: 'all' }, 20);
+    p.repos = await listRepos(p.org);
     if (p._genRepos !== gen) return;
-    p.repos = data.map(r => r.name).sort((a, b) => a.localeCompare(b));
-    u.repoCombo.setOptions(p.repos); u.repoCombo.setDisabled(false);
-  } catch (e) { if (p._genRepos === gen) p.err = e.message; }
+    u.repoCombo.setOptions(p.repos);
+    u.repoCombo.setPlaceholder('Repository');
+  } catch (e) {
+    if (p._genRepos !== gen) return;
+    /* Fine-grained tokens frequently cannot enumerate repositories. Typing an
+       exact name still works, so this is a hint rather than a failure. */
+    u.repoCombo.setPlaceholder('Repository (type the exact name)');
+  }
   if (p._genRepos === gen) { p.busy = ''; applyPanelStatus(side); }
 }
 
 async function loadBranches(side) {
+  /* A cached board can be on screen before sign-in finishes; there is
+     nothing to look up yet and no error worth showing. */
+  if (!app.token) return;
   const p = panels[side], u = pui[side];
   p.branch = ''; p.branches = []; p.commits = [];
   p.busy = 'Loading branches…'; p.err = '';
   selected[side].clear();
   applyPanelStatus(side);
-  u.branchCombo.setValue(''); u.branchCombo.setOptions([]); u.branchCombo.setDisabled(true);
+  u.branchCombo.setValue(''); u.branchCombo.setOptions([]); u.branchCombo.setDisabled(false);
   renderBothCommitLists();
 
   const gen = ++p._genBranches;
   try {
-    const data = await ghGetAll(app.token, `/repos/${p.org}/${p.repo}/branches`, {}, 20);
+    p.branches = await listBranches(p.org, p.repo);
     if (p._genBranches !== gen) return;
-    p.branches = data.map(b => b.name).sort((a, b) => a.localeCompare(b));
-    u.branchCombo.setOptions(p.branches); u.branchCombo.setDisabled(false);
-  } catch (e) { if (p._genBranches === gen) p.err = e.message; }
+    u.branchCombo.setOptions(p.branches);
+  } catch (e) {
+    if (p._genBranches !== gen) return;
+    p.err = e.status === 404
+      ? `Can't read ${p.org}/${p.repo} - check the name, or that your token has access.`
+      : e.message;
+  }
   if (p._genBranches === gen) { p.busy = ''; applyPanelStatus(side); }
+}
+
+/* Commit histories, keyed by everything that changes the answer. Both panels
+   routinely ask for the same branch (comparing a branch against itself is the
+   obvious way to check the tool works), and flipping a selector back and forth
+   used to re-page the whole history each time. Cleared on sign-out along with
+   the rest of the page state, because branch names are not public. */
+const commitCache = new Map();
+
+function listCommits(org, repo, branch, limit, onPage) {
+  const key = [org, repo, branch, limit].join('\0');
+  if (!commitCache.has(key)) {
+    const maxPages = limit === 0 ? MAX_ALL_PAGES : Math.ceil(limit / 100);
+    const p = ghGetAll(app.token, `/repos/${seg(org)}/${seg(repo)}/commits`, { sha: branch }, maxPages, onPage)
+      .then(data => markTruncated(data.map(c => ({
+        sha:    c.sha,
+        title:  (c.commit.message || '').split('\n')[0].trim(),
+        author: c.commit.author?.name || c.commit.committer?.name || 'Unknown',
+        date:   c.commit.author?.date || c.commit.committer?.date || '',
+        url:    c.html_url,
+      })), !!data.truncated));
+    /* A cached rejection would be permanent: one flaky response and that
+       branch could never be loaded again for the life of the tab. */
+    p.catch(() => commitCache.delete(key));
+    commitCache.set(key, p);
+  }
+  return commitCache.get(key);
 }
 
 async function loadCommits(side) {
   const p = panels[side];
-  p.commits = [];
-  p.busy = `Loading commits (${p.commitLimit === 0 ? 'all' : `up to ${p.commitLimit.toLocaleString()}`})…`;
+  p.commits = []; p.truncated = false;
+  p.busy = `Loading commits (up to ${(p.commitLimit || MAX_ALL_PAGES * 100).toLocaleString()})…`;
   p.err = '';
   selected[side].clear();
   applyPanelStatus(side);
   renderBothCommitLists();
 
   const gen = ++p._genCommits;
-  const maxPages = p.commitLimit === 0 ? 999 : Math.ceil(p.commitLimit / 100);
   try {
-    const data = await ghGetAll(app.token, `/repos/${p.org}/${p.repo}/commits`, { sha: p.branch }, maxPages);
+    /* Paging a long history is by far the slowest thing this page does, and a
+       static "Loading commits…" for several minutes reads as a hang. */
+    const data = await listCommits(p.org, p.repo, p.branch, p.commitLimit, (page, soFar) => {
+      if (p._genCommits !== gen) return;
+      p.busy = `Loading commits… ${soFar.toLocaleString()} so far (page ${page})`;
+      applyPanelStatus(side);
+    });
     if (p._genCommits !== gen) return;
-    p.commits = data.map(c => ({
-      sha:    c.sha,
-      title:  (c.commit.message || '').split('\n')[0].trim(),
-      author: c.commit.author?.name || c.commit.committer?.name || 'Unknown',
-      date:   c.commit.author?.date || c.commit.committer?.date || '',
-      url:    c.html_url,
-    }));
+    p.truncated = !!data.truncated;
+    p.commits = data;
     applyPanelLabel(side);
   } catch (e) { if (p._genCommits === gen) p.err = e.message; }
   if (p._genCommits === gen) { p.busy = ''; applyPanelStatus(side); renderBothCommitLists(); }
-}
-
-/* ── Token screen ───────────────────────────────────────────────────────── */
-function buildTokenScreen() {
-  const div = document.createElement('div');
-  div.className = 'token-screen';
-  div.innerHTML = `
-    <div class="token-box">
-      <div style="font-size:28px;margin-bottom:8px">🔀</div>
-      <h1>Git Branch Comparator</h1>
-      <p style="margin-bottom:8px">Visually compare commits across any two branches — even from different repositories and organizations.</p>
-      <p>A GitHub Personal Access Token with <code>repo</code> and <code>read:org</code> scopes is required. Your token is never stored beyond your own browser.</p>
-      <div class="token-row" style="margin-top:20px">
-        <input class="token-input" type="password" placeholder="ghp_xxxxxxxxxxxxxxxxxxxxxxxx" id="pat-input" />
-        <button class="btn-connect" id="btn-connect">Connect</button>
-      </div>
-      <div id="auth-err" class="err-text"></div>
-    </div>`;
-
-  const input  = div.querySelector('#pat-input');
-  const btn    = div.querySelector('#btn-connect');
-  const errEl  = div.querySelector('#auth-err');
-
-  const savedPat = localStorage.getItem(PAT_KEY);
-  if (savedPat) input.value = savedPat;
-
-  const doConnect = () => {
-    const t = input.value.trim();
-    if (!t) return;
-    btn.disabled = true; btn.textContent = 'Connecting…'; errEl.textContent = '';
-    connectWithToken(t).catch(e => {
-      errEl.textContent = '⚠ ' + e.message;
-      btn.disabled = false; btn.textContent = 'Connect';
-    });
-  };
-  btn.addEventListener('click', doConnect);
-  input.addEventListener('keydown', e => { if (e.key === 'Enter') doConnect(); });
-  return div;
-}
-
-/* ── Connect ────────────────────────────────────────────────────────────── */
-async function connectWithToken(t) {
-  const user    = await ghGet(t, '/user');
-  const orgData = await ghGetAll(t, '/user/orgs', {}, 10);
-  app.token    = t;
-  app.username = user.login;
-  app.orgs     = [user.login, ...orgData.map(o => o.login)].sort((a, b) => a.localeCompare(b));
-  localStorage.setItem(PAT_KEY, t);
-  showMain();
-}
-
-function disconnect(forget) {
-  app.token = ''; app.username = ''; app.orgs = [];
-  panels.left = mkPanel(); panels.right = mkPanel();
-  selected.left.clear(); selected.right.clear(); dialogSide = null;
-  lastLeftStatus = new Map(); lastRightStatus = new Map();
-  if (forget) { localStorage.removeItem(PAT_KEY); }
-  const root = document.getElementById('app');
-  root.innerHTML = '';
-  root.appendChild(buildTokenScreen());
 }
 
 /* ── Main app scaffold ──────────────────────────────────────────────────── */
@@ -375,20 +256,18 @@ function showMain() {
   const header = document.createElement('div');
   header.className = 'header';
   header.innerHTML = `
-    <span style="font-size:18px">🔀</span>
+    <span class="header-icon">🔀</span>
     <h1>Git Branch Comparator</h1>
-    <div style="flex:1"></div>
+    <div class="grow"></div>
     <div class="legend">
-      <span><span style="color:#4ade80">●</span> In both</span>
-      <span><span style="color:#fbbf24">●</span> Only in A</span>
-      <span><span style="color:#67e8f9">●</span> Only in B</span>
+      <span><span class="dot-both">●</span> In both</span>
+      <span><span class="dot-only-a">●</span> Only in A</span>
+      <span><span class="dot-only-b">●</span> Only in B</span>
     </div>
     <div class="divider"></div>
-    <span style="font-size:12px;color:#475569">Signed in as <strong style="color:#64748b">${app.username}</strong></span>
-    <button class="btn-sm" id="btn-disconnect">Disconnect</button>
-    <button class="btn-sm" id="btn-forget" title="Disconnect and remove saved token">Forget token</button>`;
-  header.querySelector('#btn-disconnect').addEventListener('click', () => disconnect(false));
-  header.querySelector('#btn-forget').addEventListener('click', () => disconnect(true));
+    ${ghHomeLinkHtml()}
+    ${ghHeaderTailHtml()}`;
+  wireHeaderTail(header);
   main.appendChild(header);
 
   /* Selectors */
@@ -396,7 +275,7 @@ function showMain() {
   selGrid.className = 'selectors-grid';
   selGrid.appendChild(buildSelectorPanel('left'));
   const vs = document.createElement('div');
-  vs.style.cssText = 'text-align:center;color:#475569;font-size:13px;font-weight:600;padding:0 8px;';
+  vs.className = 'vs-mark';
   vs.textContent = 'vs';
   selGrid.appendChild(vs);
   selGrid.appendChild(buildSelectorPanel('right'));
@@ -407,16 +286,31 @@ function showMain() {
   stats.className = 'stats-bar';
   stats.style.display = 'none';
   stats.id = 'stats-bar';
+  /* The five numbers are the answer the page exists to give. Replacing them in
+     place is silent to a screen reader unless the region announces itself. */
+  stats.setAttribute('role', 'status');
+  stats.setAttribute('aria-live', 'polite');
   [
-    { id: 'stat-shared', label: 'In both',    color: '#4ade80' },
-    { id: 'stat-onlyL',  label: 'Only in A',  color: '#fbbf24' },
-    { id: 'stat-onlyR',  label: 'Only in B',  color: '#67e8f9' },
-    { id: 'stat-totalL', label: 'Total in A', color: '#94a3b8' },
-    { id: 'stat-totalR', label: 'Total in B', color: '#94a3b8' },
+    { id: 'stat-shared', label: 'In both',    color: MATCH_COLOR },
+    { id: 'stat-onlyL',  label: 'Only in A',  color: SIDE_COLOR.left },
+    { id: 'stat-onlyR',  label: 'Only in B',  color: SIDE_COLOR.right },
+    { id: 'stat-totalL', label: 'Total in A', color: 'var(--text-dim)' },
+    { id: 'stat-totalR', label: 'Total in B', color: 'var(--text-dim)' },
   ].forEach(s => {
     const cell = document.createElement('div');
     cell.className = 'stat-cell';
-    cell.innerHTML = `<div class="stat-val" id="${s.id}" style="color:${s.color}">0</div><div class="stat-lbl">${s.label}</div>`;
+    /* Nodes, not markup: the colour is per-cell, and a `style` attribute in a
+       template is what would force `style-src 'unsafe-inline'` on the page.
+       `element.style` is the CSSOM and is not restricted by the policy. */
+    const val = document.createElement('div');
+    val.className = 'stat-val';
+    val.id = s.id;
+    val.style.color = s.color;
+    val.textContent = '0';
+    const lbl = document.createElement('div');
+    lbl.className = 'stat-lbl';
+    lbl.textContent = s.label;
+    cell.append(val, lbl);
     stats.appendChild(cell);
   });
   main.appendChild(stats);
@@ -460,9 +354,15 @@ function showMain() {
     <stop offset="100%" stop-color="#4ade80" stop-opacity="0.55"/>
   </linearGradient></defs>`;
 
-  const leftCol  = document.createElement('div'); leftCol.className  = 'commit-col'; leftCol.id  = 'left-commits';
+  const leftCol  = document.createElement('div'); leftCol.className  = 'commit-col side-left';  leftCol.id  = 'left-commits';
   const spacer   = document.createElement('div');
-  const rightCol = document.createElement('div'); rightCol.className = 'commit-col'; rightCol.id = 'right-commits';
+  const rightCol = document.createElement('div'); rightCol.className = 'commit-col side-right'; rightCol.id = 'right-commits';
+
+  /* One listener per column instead of seven per card. At the 5,000 setting
+     that is the difference between two handlers and seventy thousand. The
+     columns themselves survive every repaint, so this is bound once. */
+  leftCol.addEventListener('click',  e => onColumnClick('left', e));
+  rightCol.addEventListener('click', e => onColumnClick('right', e));
 
   area.append(svg, leftCol, spacer, rightCol);
   main.appendChild(area);
@@ -472,7 +372,7 @@ function showMain() {
   const empty = document.createElement('div');
   empty.id = 'empty-state';
   empty.className = 'empty-state';
-  empty.innerHTML = '<div class="icon">↑</div><p style="font-size:15px;color:#475569">Select an organization, repository, and branch on each side to start comparing</p>';
+  empty.innerHTML = '<div class="icon">↑</div><p class="empty-lead">Select an organization, repository, and branch on each side to start comparing</p>';
   main.appendChild(empty);
   ui.empty = empty;
 
@@ -481,12 +381,93 @@ function showMain() {
 
   root.appendChild(main);
   renderBothCommitLists();
-  window.addEventListener('resize', recalcSVG);
+  window.addEventListener('resize', onResize);
+  restoreSelection();
+}
+
+/* Named so disconnect() can take it off again; showMain() runs once per
+   sign-in, and an anonymous handler would accumulate across reconnects.
+   Coalesced onto a frame because a resize fires a stream of events and
+   recalcSVG walks every matched pair. */
+let resizeRaf = 0;
+function onResize() {
+  if (resizeRaf) return;
+  resizeRaf = requestAnimationFrame(() => { resizeRaf = 0; recalcSVG(); });
+}
+
+/* Everything this page owns, torn down when the shared auth signs out. */
+function resetPageState() {
+  window.removeEventListener('resize', onResize);
+  if (resizeRaf) { cancelAnimationFrame(resizeRaf); resizeRaf = 0; }
+  ['left', 'right'].forEach(side => {
+    const u = pui[side];
+    if (u) [u.orgCombo, u.repoCombo, u.branchCombo].forEach(c => c && c.destroy());
+    delete pui[side];
+  });
+  panels.left = mkPanel(); panels.right = mkPanel();
+  selected.left.clear(); selected.right.clear();
+  lastLeftStatus = new Map(); lastRightStatus = new Map();
+  cardEls.left = []; cardEls.right = [];
+  lastRendered.left = null; lastRendered.right = null;
+  /* Private repository and branch names, and the histories behind them. Signing
+     out has to take them with it. */
+  commitCache.clear();
+  store.del(SELECTION_KEY, true);
+  dialogSide = null; dialogGen++;
+  Object.keys(ui).forEach(k => delete ui[k]);
+}
+
+/* ── Selection memory ───────────────────────────────────────────────────────
+   Which org, repo and branch each side is pointing at, so a reload does not
+   throw the whole comparison away. sessionStorage, not localStorage: it
+   survives a refresh, which is the case worth solving, and it does not leave
+   private repository and branch names on a shared machine after the tab
+   closes. It also keeps this page out of the shared OWNED_KEYS list.        */
+const SELECTION_KEY = 'gh_branch_compare_selection';
+
+function saveSelection() {
+  if (!pui.left || !pui.right) return;
+  const pick = p => ({ org: p.org, repo: p.repo, branch: p.branch, limit: p.commitLimit });
+  try { store.set(SELECTION_KEY, JSON.stringify({ left: pick(panels.left), right: pick(panels.right) }), true); }
+  catch (e) { /* not worth failing a selection over */ }
+}
+
+function restoreSelection() {
+  let saved;
+  try { saved = JSON.parse(store.get(SELECTION_KEY, true) || 'null'); } catch (e) { return; }
+  if (!saved) return;
+  ['left', 'right'].forEach(side => {
+    const s = saved[side];
+    /* Owner and repository reach a URL path and a generated shell script, so
+       they are validated rather than trusted. A branch may legally contain
+       almost anything, so it is only length-capped; seg() and shellQuote()
+       are what actually make it safe downstream. */
+    if (!s || !isGhName(s.org) || !isGhName(s.repo)) return;
+    const branch = typeof s.branch === 'string' && s.branch.length <= 255 ? s.branch : '';
+    const p = panels[side], u = pui[side];
+    /* Only ever a value the dropdown actually offers, so the stored number and
+       the control on screen cannot disagree. */
+    const limit = clampInt(s.limit, 0, 5000, 500);
+    p.commitLimit = [100, 500, 1000, 2000, 5000, 0].includes(limit) ? limit : 500;
+    u.limitSel.value = String(p.commitLimit);
+    p.org = s.org;
+    u.orgCombo.setValue(s.org);
+    u.repoCombo.setValue(s.repo); u.repoCombo.setDisabled(false);
+    /* Enabled because a repository is set, not because a branch is: landing
+       with the branch box greyed out would leave no way to choose one. */
+    u.branchCombo.setValue(branch); u.branchCombo.setDisabled(false);
+    p.repo = s.repo; p.branch = branch;
+    /* Fill the dropdowns in the background; the commits are what the viewer
+       actually came back for, so they are fetched straight away. */
+    listRepos(s.org).then(r => { if (panels[side].org === s.org) u.repoCombo.setOptions(r); }).catch(() => {});
+    listBranches(s.org, s.repo).then(b => { if (panels[side].repo === s.repo) u.branchCombo.setOptions(b); }).catch(() => {});
+    if (branch) loadCommits(side);
+  });
 }
 
 /* ── Selector panel ─────────────────────────────────────────────────────── */
 function buildSelectorPanel(side) {
-  const color  = side === 'left' ? '#fbbf24' : '#67e8f9';
+  const color  = SIDE_COLOR[side];
   const label  = side === 'left' ? 'Branch A' : 'Branch B';
   const p      = panels[side];
 
@@ -502,9 +483,12 @@ function buildSelectorPanel(side) {
   const row    = document.createElement('div');
   row.className = 'panel-inputs';
 
-  const orgCombo    = new Combobox({ placeholder: 'Organization', onChange: v => { p.org = v; v ? loadRepos(side) : clearPanel(side); } });
-  const repoCombo   = new Combobox({ placeholder: 'Repository',   onChange: v => { p.repo = v; v ? loadBranches(side) : clearBranchAndCommits(side); }, disabled: true });
-  const branchCombo = new Combobox({ placeholder: 'Branch',       onChange: v => { p.branch = v; v ? loadCommits(side) : clearCommits(side); }, disabled: true });
+  const orgCombo    = new Combobox({ placeholder: 'Owner or organization', label: `${label} owner`,
+    onChange: v => { p.org = v.trim(); p.org ? loadRepos(side) : clearPanel(side); saveSelection(); } });
+  const repoCombo   = new Combobox({ placeholder: 'Repository', label: `${label} repository`, disabled: true,
+    onChange: v => { p.repo = v.trim(); p.repo ? loadBranches(side) : clearBranchAndCommits(side); saveSelection(); } });
+  const branchCombo = new Combobox({ placeholder: 'Branch', label: `${label} branch`, disabled: true,
+    onChange: v => { p.branch = v.trim(); p.branch ? loadCommits(side) : clearCommits(side); saveSelection(); } });
 
   orgCombo.setOptions(app.orgs);
   row.append(orgCombo.el, repoCombo.el, branchCombo.el);
@@ -512,18 +496,22 @@ function buildSelectorPanel(side) {
   const limitSel = document.createElement('select');
   limitSel.className = 'limit-select';
   limitSel.title = 'Maximum number of commits to load';
+  limitSel.setAttribute('aria-label', `${label} commit limit`);
   [100, 500, 1000, 2000, 5000, 0].forEach(v => {
     const opt = document.createElement('option');
-    opt.value = v; opt.textContent = v === 0 ? 'All commits' : `${v.toLocaleString()} commits`;
+    /* "All" is capped, and the label says so rather than letting the
+       truncation note be the first the viewer hears of it. */
+    opt.value = v; opt.textContent = v === 0 ? `All (max ${(MAX_ALL_PAGES * 100).toLocaleString()})` : `${v.toLocaleString()} commits`;
     if (v === 500) opt.selected = true;
     limitSel.appendChild(opt);
   });
-  limitSel.addEventListener('change', () => { p.commitLimit = Number(limitSel.value); if (p.branch) loadCommits(side); });
+  limitSel.addEventListener('change', () => { p.commitLimit = Number(limitSel.value); saveSelection(); if (p.branch) loadCommits(side); });
   row.appendChild(limitSel);
 
   const status = document.createElement('div');
   status.className = 'panel-status';
   status.id = `panel-status-${side}`;
+  status.setAttribute('role', 'status');
   status.style.display = 'none';
 
   panel.append(lbl, row, status);
@@ -532,9 +520,14 @@ function buildSelectorPanel(side) {
   return panel;
 }
 
+/* The generation counters guard against a newer load overtaking an older one.
+   Clearing a selector is the other way a load becomes stale: the viewer has
+   cancelled it. Without the bump, emptying the branch box mid-flight lets the
+   response arrive and repaint commits under a selector that is now blank. */
 function clearPanel(side) {
   const p = panels[side], u = pui[side];
-  p.repo = ''; p.branch = ''; p.repos = []; p.branches = []; p.commits = []; p.busy = ''; p.err = '';
+  p._genRepos++; p._genBranches++; p._genCommits++;
+  p.repo = ''; p.branch = ''; p.repos = []; p.branches = []; p.commits = []; p.busy = ''; p.err = ''; p.truncated = false;
   selected[side].clear();
   u.repoCombo.setValue(''); u.repoCombo.setOptions([]); u.repoCombo.setDisabled(true);
   u.branchCombo.setValue(''); u.branchCombo.setOptions([]); u.branchCombo.setDisabled(true);
@@ -543,25 +536,40 @@ function clearPanel(side) {
 }
 function clearBranchAndCommits(side) {
   const p = panels[side], u = pui[side];
-  p.branch = ''; p.branches = []; p.commits = []; p.busy = ''; p.err = '';
+  p._genBranches++; p._genCommits++;
+  p.branch = ''; p.branches = []; p.commits = []; p.busy = ''; p.err = ''; p.truncated = false;
   selected[side].clear();
   u.branchCombo.setValue(''); u.branchCombo.setOptions([]); u.branchCombo.setDisabled(true);
   lastLeftStatus = new Map(); lastRightStatus = new Map();
   applyPanelStatus(side); applyPanelLabel(side); renderBothCommitLists();
 }
 function clearCommits(side) {
-  panels[side].commits = []; selected[side].clear();
+  const p = panels[side];
+  p._genCommits++;
+  p.commits = []; p.truncated = false; p.busy = '';
+  selected[side].clear();
   lastLeftStatus = new Map(); lastRightStatus = new Map();
-  applyPanelLabel(side); renderBothCommitLists();
+  applyPanelStatus(side); applyPanelLabel(side); renderBothCommitLists();
 }
 
 function applyPanelStatus(side) {
-  const p = panels[side], s = pui[side].statusEl;
+  const u = pui[side];
+  /* Sign-out tears the panels down while loads are still in flight, and their
+     completion handlers land here afterwards. applyPanelLabel already guards;
+     this one used to throw instead. */
+  if (!u) return;
+  const p = panels[side], s = u.statusEl;
+  s.textContent = '';
   if (p.busy) {
     s.style.display = 'flex';
-    s.style.color   = '#64748b';
-    const dotColor  = side === 'left' ? '#fbbf24' : '#67e8f9';
-    s.innerHTML = `<span class="pulse-dot" style="background:${dotColor}"></span> ${p.busy}`;
+    s.style.color   = 'var(--text-mute)';
+    /* Built as nodes, not markup. The status text is page-generated today, but
+       the error branch below already had to be textContent and one sink that
+       silently expects trusted input is how the next XSS gets written. */
+    const dot = document.createElement('span');
+    dot.className = 'pulse-dot';
+    dot.style.background = SIDE_COLOR[side];
+    s.append(dot, ' ' + p.busy);
   } else if (p.err) {
     s.style.display = 'flex'; s.style.color = '#f87171';
     s.textContent = '⚠ ' + p.err;
@@ -574,52 +582,76 @@ function applyPanelLabel(side) {
   if (!u) return;
   const base = u.baseLabel;
   const n    = panels[side].commits.length;
-  u.labelEl.innerHTML = n > 0
-    ? `${base} <span style="font-size:11px;font-weight:400;color:#475569;text-transform:none;letter-spacing:0"> — ${n} commits</span>`
-    : base;
+  u.labelEl.textContent = base;
+  if (n > 0) {
+    const count = document.createElement('span');
+    count.style.cssText = 'font-size:var(--fs-sm);font-weight:400;color:var(--text-faint);text-transform:none;letter-spacing:0';
+    count.textContent = ` (${n.toLocaleString()} commits)`;
+    u.labelEl.appendChild(count);
+  }
 }
 
 /* ── Commit list rendering ──────────────────────────────────────────────── */
 const cardEls = { left: [], right: [] };
 
-/* ── Classification ─────────────────────────────────────────────────────── */
-// Strip trailing PR-number suffix: "Fix bug (#1234)" → "Fix bug"
-const normTitle = t => t.replace(/(\s*\(#\d+\))+\s*$/, '').trim();
+/* What a column was last drawn from. Rebuilding thousands of cards is only
+   worth it when something that changes them has moved, and a column's colours
+   depend on the other side's commits as well as its own. Selection is a class
+   toggle, so it is deliberately not part of this. */
+const lastRendered = { left: null, right: null };
 
+/* ── Classification ─────────────────────────────────────────────────────────
+   Matching is by commit subject, with any trailing "(#1234)" removed, because
+   the REST commit list returns no patch id and fetching one diff per commit
+   would be a request per row. That means it CAN see a plain cherry-pick, a
+   rebase, and a squash-merge that kept its subject; and it CANNOT see a
+   cherry-pick that was reworded, nor tell two unrelated commits apart when
+   they happen to share a subject ("Update changelog"). It is a strong hint,
+   not proof, and the counts below are built so they at least never contradict
+   each other.
+
+   Pairing is one-to-one. Three commits called "Bump version" on A and one on B
+   is one pair and two genuinely missing, not three matches - which is what the
+   previous first-occurrence lookup reported, on a release branch where
+   repeated subjects are the norm.                                           */
 function classifyCommits() {
   const lc = panels.left.commits;
   const rc = panels.right.commits;
 
-  // Build first-occurrence title maps (commits arrive newest-first, so first = most recent)
-  const leftByTitle = new Map();
-  for (const c of lc) {
-    const key = normTitle(c.title);
-    if (key && !leftByTitle.has(key)) leftByTitle.set(key, c);
-  }
-  const rightByTitle = new Map();
+  /* Queues per subject, in list order (newest first), so the newest unmatched
+     commit on one side pairs with the newest unmatched one on the other. */
+  const rightQueues = new Map();
   for (const c of rc) {
-    const key = normTitle(c.title);
-    if (key && !rightByTitle.has(key)) rightByTitle.set(key, c);
+    const key = stripPrSuffix(c.title);
+    /* Only a genuinely empty subject normalises to nothing. stripPrSuffix
+       falls back to the original title, so "(#42)" stays "(#42)" and still
+       matches its counterpart. An empty subject matches nothing at all, not
+       even another empty one: there is no evidence there to match on. */
+    if (!key) continue;
+    if (!rightQueues.has(key)) rightQueues.set(key, []);
+    rightQueues.get(key).push(c);
   }
 
-  lastLeftStatus = new Map();
-  for (const c of lc) {
-    const match = rightByTitle.get(normTitle(c.title));
-    lastLeftStatus.set(c.sha, match
-      ? { color: '#4ade80', matchSha: match.sha }
-      : { color: '#fbbf24', matchSha: null });
-  }
-
+  lastLeftStatus  = new Map();
   lastRightStatus = new Map();
-  for (const c of rc) {
-    const match = leftByTitle.get(normTitle(c.title));
-    lastRightStatus.set(c.sha, match
-      ? { color: '#4ade80', matchSha: match.sha }
-      : { color: '#67e8f9', matchSha: null });
+  for (const c of rc) lastRightStatus.set(c.sha, { color: SIDE_COLOR.right, matchSha: null });
+
+  for (const c of lc) {
+    const key = stripPrSuffix(c.title);
+    const q = key ? rightQueues.get(key) : null;
+    const match = q && q.length ? q.shift() : null;   // consumed, so it cannot match twice
+    lastLeftStatus.set(c.sha, match
+      ? { color: MATCH_COLOR, matchSha: match.sha }
+      : { color: SIDE_COLOR.left, matchSha: null });
+    if (match) lastRightStatus.set(match.sha, { color: MATCH_COLOR, matchSha: c.sha });
   }
 }
 
 function renderBothCommitLists() {
+  /* Signing out empties `ui` while loads are still in flight, and their
+     completion handlers arrive here afterwards with nothing left to draw
+     into. recalcSVG and updateCherryBtns already check; this did not. */
+  if (!ui.leftCol || !ui.rightCol || !ui.statsBar) return;
   const lp = panels.left, rp = panels.right;
   const hasAny = lp.commits.length > 0 || rp.commits.length > 0;
 
@@ -628,13 +660,17 @@ function renderBothCommitLists() {
   cardEls.left  = renderCommitCol('left',  ui.leftCol,  lastLeftStatus);
   cardEls.right = renderCommitCol('right', ui.rightCol, lastRightStatus);
 
-  /* Stats bar */
+  /* Stats bar. Every number is counted from the status maps rather than
+     derived by subtraction, so "In both" plus "Only in A" is always "Total in
+     A" and the cards on screen always agree with the totals above them. */
   if (lp.commits.length > 0 && rp.commits.length > 0) {
     ui.statsBar.style.display = 'flex';
-    const sharedCount = [...lastLeftStatus.values()].filter(s => s.matchSha).length;
-    document.getElementById('stat-shared').textContent = sharedCount;
-    document.getElementById('stat-onlyL').textContent  = lp.commits.length - sharedCount;
-    document.getElementById('stat-onlyR').textContent  = [...lastRightStatus.values()].filter(s => !s.matchSha).length;
+    const unmatched = m => { let n = 0; for (const s of m.values()) if (!s.matchSha) n++; return n; };
+    const onlyL = unmatched(lastLeftStatus);
+    const onlyR = unmatched(lastRightStatus);
+    document.getElementById('stat-shared').textContent = lastLeftStatus.size - onlyL;
+    document.getElementById('stat-onlyL').textContent  = onlyL;
+    document.getElementById('stat-onlyR').textContent  = onlyR;
     document.getElementById('stat-totalL').textContent = lp.commits.length;
     document.getElementById('stat-totalR').textContent = rp.commits.length;
   } else {
@@ -647,85 +683,125 @@ function renderBothCommitLists() {
   recalcSVG();
 }
 
+/* Only ever set an href we recognise. `html_url` has always been a github.com
+   URL in practice, but it arrives over the network, and an absent one would
+   otherwise become the literal string "undefined" and navigate the tab. */
+function commitHref(url) {
+  return typeof url === 'string' && url.startsWith('https://github.com/') ? url : null;
+}
+
 function renderCommitCol(side, col, statusMap) {
+  const p       = panels[side];
+  const commits = p.commits;
+  const other   = panels[side === 'left' ? 'right' : 'left'].commits;
+  /* Nothing this column is drawn from has moved, so the thousands of nodes
+     already in it are still correct. */
+  const stamp = lastRendered[side];
+  if (stamp && stamp.commits === commits && stamp.other === other && stamp.truncated === p.truncated) return cardEls[side];
+  lastRendered[side] = { commits, other, truncated: p.truncated };
+
   col.innerHTML = '';
-  const commits = panels[side].commits;
   const els = [];
+
+  /* Paging stopped at the cap, so the older half of each history was never
+     compared. Saying nothing here is what turns "Only in A: 137" into a
+     confident wrong answer. */
+  if (p.truncated) {
+    const note = document.createElement('div');
+    note.className = 'trunc-note';
+    note.textContent = `⚠ Only the newest ${commits.length.toLocaleString()} commits were loaded. `
+      + 'Anything older is not compared, so commits that are on both branches can still be listed as missing.';
+    col.appendChild(note);
+  }
+
+  const frag = document.createDocumentFragment();
   commits.forEach(commit => {
-    const st    = statusMap.get(commit.sha) || { symbol: null, color: '#475569', matchSha: null };
+    const st    = statusMap.get(commit.sha) || { color: '#8b99ad', matchSha: null };
     const color = st.color;
-    const isSel   = selected[side].has(commit.sha);
+    const isSel = selected[side].has(commit.sha);
+    const title = commit.title || '(no message)';
+    const href  = commitHref(commit.url);
 
     const card = document.createElement('div');
-    card.className = 'commit-card';
+    card.className = isSel ? 'commit-card is-selected' : 'commit-card';
     card.dataset.sha = commit.sha;
-    card.style.background = isSel ? color + '30' : color + '18';
-    card.style.borderTop    = `1px solid ${isSel ? color + '60' : color + '28'}`;
-    card.style.borderBottom = `1px solid ${isSel ? color + '60' : color + '28'}`;
-    if (side === 'left') {
-      card.style.borderLeft  = `3px solid ${color}`;
-      card.style.borderRight = `1px solid ${isSel ? color + '60' : color + '28'}`;
-    } else {
-      card.style.borderRight = `3px solid ${color}`;
-      card.style.borderLeft  = `1px solid ${isSel ? color + '60' : color + '28'}`;
-    }
+    /* Written once; :hover and .is-selected read them from CSS. */
+    card.style.setProperty('--cc',          color);
+    card.style.setProperty('--cc-bg',       color + '18');
+    card.style.setProperty('--cc-hover',    color + '24');
+    card.style.setProperty('--cc-sel',      color + '30');
+    card.style.setProperty('--cc-line',     color + '28');
+    card.style.setProperty('--cc-line-sel', color + '60');
 
     const cb = document.createElement('input');
     cb.type = 'checkbox'; cb.checked = isSel;
-    cb.style.accentColor = color;
     cb.className = 'commit-card-cb';
-    cb.addEventListener('change', e => { e.stopPropagation(); toggleSelect(side, commit.sha, card, color, cb); });
-    cb.addEventListener('click',  e => e.stopPropagation());
+    /* Without this every row announces as an unnamed checkbox, and five
+       hundred of them in a column are indistinguishable. */
+    cb.setAttribute('aria-label', `Select commit ${commit.sha.slice(0, 7)}: ${title}`);
 
     const body = document.createElement('div');
     body.style.cssText = 'flex:1;min-width:0;';
 
     const titleLink = document.createElement('a');
     titleLink.className = 'title-link';
-    titleLink.href = commit.url;
-    titleLink.target = '_blank';
-    titleLink.rel = 'noopener';
-    titleLink.textContent = commit.title || '(no message)';
+    if (href) { titleLink.href = href; titleLink.target = '_blank'; titleLink.rel = 'noopener'; }
+    titleLink.textContent = title;
+    titleLink.title = title;          // the subject is ellipsised, so it needs one
     titleLink.style.color = color;
-    titleLink.addEventListener('click', e => e.stopPropagation());
 
     const meta = document.createElement('div');
     meta.className = 'meta';
     const sha  = document.createElement('span'); sha.className = 'sha'; sha.textContent = commit.sha.slice(0, 7);
     const auth = document.createElement('span'); auth.textContent = commit.author;
-    const extA = document.createElement('a');
-    extA.className = 'ext-link'; extA.href = commit.url; extA.target = '_blank'; extA.rel = 'noopener';
-    extA.textContent = '↗'; extA.title = 'Open on GitHub';
-    extA.addEventListener('click', e => e.stopPropagation());
 
     meta.append(sha, auth);
-    if (commit.date) { const d = document.createElement('span'); d.textContent = new Date(commit.date).toLocaleDateString(); meta.appendChild(d); }
-    meta.appendChild(extA);
+    if (commit.date) {
+      const t = new Date(commit.date);
+      if (!isNaN(t)) { const d = document.createElement('span'); d.textContent = t.toLocaleDateString(); meta.appendChild(d); }
+    }
+    if (href) {
+      const extA = document.createElement('a');
+      extA.className = 'ext-link'; extA.href = href; extA.target = '_blank'; extA.rel = 'noopener';
+      extA.textContent = '↗'; extA.title = 'Open on GitHub';
+      meta.appendChild(extA);
+    }
     body.append(titleLink, meta);
     card.append(cb, body);
 
-    card.addEventListener('click', () => toggleSelect(side, commit.sha, card, color, cb));
-    card.addEventListener('mouseenter', () => { if (!selected[side].has(commit.sha)) card.style.background = color + '24'; });
-    card.addEventListener('mouseleave', () => { card.style.background = selected[side].has(commit.sha) ? color + '30' : color + '18'; });
-
-    col.appendChild(card);
+    frag.appendChild(card);
     els.push(card);
   });
+  col.appendChild(frag);
   return els;
 }
 
 /* ── Selection ──────────────────────────────────────────────────────────── */
-function toggleSelect(side, sha, card, color, cb) {
+
+/* Delegated from the column. A keyboard Space on the checkbox also arrives as
+   a click, so this covers mouse and keyboard with one handler. */
+function onColumnClick(side, e) {
+  if (e.target.closest('a')) return;                    // links open on their own
+  const card = e.target.closest('.commit-card');
+  if (!card) return;
+  const onCheckbox = e.target.classList.contains('commit-card-cb');
+  if (!onCheckbox) {
+    /* A drag that highlights a commit subject ends with a click on the card,
+       which used to toggle the row the viewer was only trying to read. */
+    const s = window.getSelection();
+    if (s && !s.isCollapsed) return;
+  }
+  toggleSelect(side, card);
+}
+
+function toggleSelect(side, card) {
+  const sha = card.dataset.sha;
   const sel = selected[side];
   if (sel.has(sha)) { sel.delete(sha); } else { sel.add(sha); }
   const isSel = sel.has(sha);
-  cb.checked = isSel;
-  card.style.background   = isSel ? color + '30' : color + '18';
-  const borderVal = isSel ? color + '60' : color + '28';
-  card.style.borderTop    = `1px solid ${borderVal}`;
-  card.style.borderBottom = `1px solid ${borderVal}`;
-  if (side === 'left')  card.style.borderRight = `1px solid ${borderVal}`;
-  else                  card.style.borderLeft  = `1px solid ${borderVal}`;
+  card.classList.toggle('is-selected', isSel);
+  const cb = card.querySelector('.commit-card-cb');
+  if (cb) cb.checked = isSel;                           // resync: a click on the box already flipped it
   updateCherryBtns();
 }
 
@@ -734,17 +810,23 @@ function updateCherryBtns() {
     const count  = selected[side].size;
     const btn    = document.getElementById(`cherry-btn-${side}`);
     const countEl = document.getElementById(`cherry-count-${side}`);
-    const color  = side === 'left' ? '#fbbf24' : '#67e8f9';
+    const color  = SIDE_COLOR[side];
     if (!btn) return;
-    btn.disabled = count === 0;
-    if (count > 0) {
+    /* The script clones the other side's repository and branches off it, so
+       without one there is nothing to cherry-pick into. Offering the button
+       anyway produced `git clone 'https://github.com//.git'`. */
+    const tgt = panels[side === 'left' ? 'right' : 'left'];
+    const haveTarget = !!(tgt.org && tgt.repo && tgt.branch);
+    btn.disabled = count === 0 || !haveTarget;
+    btn.title = haveTarget ? '' : 'Choose an owner, repository and branch on the other side first';
+    if (count > 0 && haveTarget) {
       btn.classList.add('enabled');
       btn.style.borderColor = color + '60'; btn.style.background = color + '18'; btn.style.color = color;
       countEl.textContent = `${count} commit${count !== 1 ? 's' : ''} selected`;
     } else {
       btn.classList.remove('enabled');
-      btn.style.borderColor = '#334155'; btn.style.background = 'transparent'; btn.style.color = '#334155';
-      countEl.textContent = '';
+      btn.style.borderColor = 'var(--border)'; btn.style.background = 'transparent'; btn.style.color = 'var(--border)';
+      countEl.textContent = count > 0 ? `${count} selected, no target branch` : '';
     }
   });
 }
@@ -759,9 +841,20 @@ function recalcSVG() {
   [...ui.svg.querySelectorAll('path')].forEach(p => p.remove());
   if (!lCommits.length || !rCommits.length) { ui.svg.style.height = '0'; return; }
 
+  /* Below the stacking breakpoint the connectors are hidden, and two columns
+     that are no longer side by side have nothing meaningful to connect. The
+     work is the same either way, so skip it rather than pay it on the weakest
+     devices for output nobody sees. */
+  if (getComputedStyle(ui.svg).display === 'none') return;
+
   const cRect    = ui.area.getBoundingClientRect();
   const rIdxBySha = new Map(rCommits.map((c, i) => [c.sha, i]));
 
+  /* Measure everything, then write everything. Interleaving the two made each
+     appendChild invalidate layout and each getBoundingClientRect force it back,
+     which is quadratic: 338ms at the default 500 commits a side and 5.4s at
+     2,000, against 4ms and 18ms for the same output batched. */
+  const coords = [];
   lCommits.forEach((lc, li) => {
     const st = lastLeftStatus.get(lc.sha);
     if (!st || !st.matchSha) return;
@@ -772,17 +865,22 @@ function recalcSVG() {
     if (!lEl || !rEl) return;
     const lR = lEl.getBoundingClientRect();
     const rR = rEl.getBoundingClientRect();
-    const x1 = lR.right - cRect.left,  y1 = lR.top + lR.height / 2 - cRect.top;
-    const x2 = rR.left  - cRect.left,  y2 = rR.top + rR.height / 2 - cRect.top;
+    coords.push([lR.right - cRect.left, lR.top + lR.height / 2 - cRect.top,
+                 rR.left  - cRect.left, rR.top + rR.height / 2 - cRect.top]);
+  });
+  const areaHeight = ui.area.scrollHeight;      // last read, before any write
+
+  const frag = document.createDocumentFragment();
+  coords.forEach(([x1, y1, x2, y2]) => {
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     path.setAttribute('d', `M ${x1},${y1} C ${x1+35},${y1} ${x2-35},${y2} ${x2},${y2}`);
     path.setAttribute('stroke', 'url(#lg)');
     path.setAttribute('stroke-width', '1.5');
     path.setAttribute('fill', 'none');
-    ui.svg.appendChild(path);
+    frag.appendChild(path);
   });
-
-  ui.svg.style.height = ui.area.scrollHeight + 'px';
+  ui.svg.appendChild(frag);
+  ui.svg.style.height = areaHeight + 'px';
 }
 
 /* ── Cherry-pick dialog ─────────────────────────────────────────────────── */
@@ -794,6 +892,10 @@ function buildDialog() {
 
   const box = document.createElement('div');
   box.className = 'dialog-box';
+  box.setAttribute('role', 'dialog');
+  box.setAttribute('aria-modal', 'true');
+  box.setAttribute('aria-labelledby', 'dialog-title');
+  box.tabIndex = -1;
 
   box.innerHTML = `
     <div class="dialog-header">
@@ -801,9 +903,9 @@ function buildDialog() {
         <div class="dialog-title" id="dialog-title"></div>
         <div class="dialog-subtitle" id="dialog-subtitle"></div>
       </div>
-      <button class="dialog-close" id="dialog-close">×</button>
+      <button class="dialog-close" id="dialog-close" aria-label="Close">×</button>
     </div>
-    <div id="dialog-commits-preview" class="commits-preview"></div>
+    <div id="dialog-commits-preview" class="commits-preview" tabindex="0" role="group" aria-label="Commits to cherry-pick"></div>
     <div class="two-col">
       <div><label class="field-label">New branch name</label><input class="field-input" id="dialog-branch" /></div>
       <div><label class="field-label">Clone directory</label><input class="field-input" id="dialog-dir" /></div>
@@ -811,7 +913,7 @@ function buildDialog() {
     <div class="field-group"><label class="field-label">PR title</label><input class="field-input" id="dialog-pr-title" placeholder="e.g. Cherry-pick fixes from main into release/2.x" /></div>
     <div class="field-group"><label class="field-label" id="dialog-desc-label">PR description</label><textarea class="field-textarea" id="dialog-pr-desc" rows="6"></textarea></div>
     <div class="script-header">
-      <span class="field-label" style="margin:0">Shell script</span>
+      <span class="field-label m0">Shell script</span>
       <button class="btn-copy" id="dialog-copy">Copy</button>
     </div>
     <pre class="script-pre" id="dialog-script"></pre>
@@ -821,7 +923,11 @@ function buildDialog() {
   box.querySelector('#dialog-close2').addEventListener('click', closeDialog);
   box.querySelector('#dialog-copy').addEventListener('click', () => {
     const script = document.getElementById('dialog-script').textContent;
-    navigator.clipboard.writeText(script).then(() => {
+    /* copyText falls back to a hidden textarea where navigator.clipboard is
+       missing, which is every non-secure context. Calling the API directly
+       threw on plain http and told the viewer nothing, and the Copy button is
+       the only way this script leaves the dialog. */
+    copyText(script).then(() => {
       const btn = document.getElementById('dialog-copy');
       btn.textContent = '✔ Copied!';
       btn.style.background = '#14532d'; btn.style.color = '#4ade80'; btn.style.borderColor = '#166534';
@@ -829,14 +935,31 @@ function buildDialog() {
         btn.textContent = 'Copy';
         btn.style.background = ''; btn.style.color = ''; btn.style.borderColor = '';
       }, 2000);
-    });
+    }).catch(() => toast('Could not copy. Select the script and copy it manually.'));
   });
 
-  ['dialog-branch', 'dialog-dir'].forEach(id => {
-    document.addEventListener('input', e => { if (e.target.id === id) updateDialogScript(); }, true);
+  /* Scoped to the dialog rather than the document: buildDialog() runs once
+     per sign-in, and document-level handlers would accumulate. */
+  box.addEventListener('input', e => {
+    if (['dialog-branch', 'dialog-dir', 'dialog-pr-title', 'dialog-pr-desc'].includes(e.target.id)) updateDialogScript();
   });
+  overlay.addEventListener('keydown', e => { if (e.key === 'Escape') closeDialog(); });
+  overlay.addEventListener('mousedown', e => { if (e.target === overlay) closeDialog(); });
 
-  document.addEventListener('keydown', e => { if (e.key === 'Escape' && dialogSide) closeDialog(); });
+  /* aria-modal promises assistive tech that the rest of the page is out of
+     reach, and the overlay hides it visually, but Tab still walked straight
+     into the comboboxes underneath - invisible, focusable and still live. Once
+     focus left the overlay, Escape stopped working too, because the handler
+     above only sees keys that bubble out of it. */
+  box.addEventListener('keydown', e => {
+    if (e.key !== 'Tab') return;
+    const f = [...box.querySelectorAll('button, input, textarea, [tabindex]:not([tabindex="-1"])')]
+      .filter(el => !el.disabled && el.offsetParent !== null);
+    if (!f.length) return;
+    const first = f[0], last = f[f.length - 1];
+    if (e.shiftKey && (document.activeElement === first || document.activeElement === box)) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  });
 
   overlay.appendChild(box);
   return overlay;
@@ -844,18 +967,27 @@ function buildDialog() {
 
 function openDialog(side) {
   dialogSide = side;
+  const gen      = ++dialogGen;
   const srcPanel = panels[side];
   const tgtPanel = panels[side === 'left' ? 'right' : 'left'];
   const sel      = selected[side];
-  const srcColor = side === 'left' ? '#fbbf24' : '#67e8f9';
-  const tgtColor = side === 'left' ? '#67e8f9' : '#fbbf24';
+  const srcColor = SIDE_COLOR[side];
+  const tgtColor = SIDE_COLOR[side === 'left' ? 'right' : 'left'];
 
   // Title & subtitle
   document.getElementById('dialog-title').textContent =
     `🍒 Cherry-pick ${sel.size} commit${sel.size !== 1 ? 's' : ''}`;
-  document.getElementById('dialog-subtitle').innerHTML =
-    `From <strong style="color:${srcColor}">${srcPanel.org}/${srcPanel.repo}:${srcPanel.branch}</strong>` +
-    ` → new branch based on <strong style="color:${tgtColor}">${tgtPanel.org}/${tgtPanel.repo}:${tgtPanel.branch}</strong>`;
+  /* Built from text nodes. A git ref may legally contain <, > and quotes, so
+     a branch name is untrusted input and must never be interpolated as HTML. */
+  const sub = document.getElementById('dialog-subtitle');
+  const ref = (panel, color) => {
+    const el = document.createElement('strong');
+    el.style.color = color;
+    el.textContent = `${panel.org}/${panel.repo}:${panel.branch}`;
+    return el;
+  };
+  sub.textContent = '';
+  sub.append('From ', ref(srcPanel, srcColor), ' → new branch based on ', ref(tgtPanel, tgtColor));
 
   // Commits preview (oldest first)
   const orderedCommits = [...srcPanel.commits.filter(c => sel.has(c.sha))].reverse();
@@ -864,15 +996,26 @@ function openDialog(side) {
   orderedCommits.forEach(c => {
     const row = document.createElement('div');
     row.className = 'preview-row';
-    row.innerHTML = `<span style="font-family:monospace;color:#475569;flex-shrink:0">${c.sha.slice(0,7)}</span>
-      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.title}</span>`;
+    const shaEl = document.createElement('span');
+    shaEl.className = 'preview-sha';
+    shaEl.textContent = c.sha.slice(0, 7);
+    /* A commit subject has no character restrictions whatsoever. textContent,
+       never innerHTML. */
+    const titleEl = document.createElement('span');
+    titleEl.className = 'preview-title';
+    titleEl.textContent = c.title;
+    titleEl.title = c.title;
+    row.append(shaEl, titleEl);
     preview.appendChild(row);
   });
 
-  // Defaults
-  const isWin = navigator.userAgent.includes('Windows') || navigator.platform.startsWith('Win');
+  /* Defaults. The script is bash, so the clone directory has to be a path bash
+     understands. The old Windows branch emitted %TEMP%, which bash does not
+     expand and which quietly created a directory literally called "%TEMP%";
+     Git Bash and WSL both have /tmp, and nothing else can run the script at
+     all. That also retires the deprecated navigator.platform read. */
   document.getElementById('dialog-branch').value = `${app.username || 'cherry-pick'}/cherry-pick`;
-  document.getElementById('dialog-dir').value    = isWin ? '%TEMP%' : '/tmp';
+  document.getElementById('dialog-dir').value    = '/tmp';
   document.getElementById('dialog-pr-title').value = '';
 
   // Fetch PR template from target repo
@@ -880,25 +1023,42 @@ function openDialog(side) {
   const descLbl = document.getElementById('dialog-desc-label');
   descEl.value = '';
   if (tgtPanel.org && tgtPanel.repo) {
-    descLbl.innerHTML = 'PR description <span style="font-weight:400;color:#475569;text-transform:none;letter-spacing:0"> — loading template…</span>';
-    ghGet(app.token, `/repos/${tgtPanel.org}/${tgtPanel.repo}/contents/.github/pull_request_template.md`)
+    descLbl.innerHTML = 'PR description <span class="label-note"> - loading template…</span>';
+    ghGet(app.token, `/repos/${seg(tgtPanel.org)}/${seg(tgtPanel.repo)}/contents/.github/pull_request_template.md`)
       .then(data => {
-        if (data.content) descEl.value = atob(data.content.replace(/\s/g, ''));
+        /* Close the dialog and reopen it on the other side and both fetches are
+           still running; without the generation check the slower one fills in
+           the wrong repository's template. And whatever the viewer has already
+           typed outranks a template that arrives late. */
+        if (gen !== dialogGen) return;
+        if (data.content && !descEl.value) { descEl.value = b64DecodeUtf8(data.content); updateDialogScript(); }
         descLbl.textContent = 'PR description';
       })
-      .catch(() => { descLbl.textContent = 'PR description'; });
+      .catch(() => { if (gen === dialogGen) descLbl.textContent = 'PR description'; });
   }
 
-  // Copy button reset
+  /* Copy button reset. Clearing cssText is enough: .btn-copy already carries
+     the padding, radius and colours, and re-declaring them inline only meant
+     the button changed size the first time the dialog opened. */
   const copyBtn = document.getElementById('dialog-copy');
   copyBtn.textContent = 'Copy'; copyBtn.style.cssText = '';
-  Object.assign(copyBtn.style, {
-    padding:'5px 14px', borderRadius:'6px', fontSize:'12px', cursor:'pointer',
-    border:'1px solid #334155', background:'#0f172a', color:'#94a3b8', marginLeft:'auto',
-  });
 
-  document.getElementById('dialog-overlay').style.display = 'flex';
+  const overlay = document.getElementById('dialog-overlay');
+  overlay.style.display = 'flex';
+  lastFocused = document.activeElement;
+  overlay.querySelector('.dialog-box').focus();
   updateDialogScript();
+}
+
+/* A here-doc keeps a multi-line PR body readable in the generated script. The
+   delimiter has to be a string that never appears on a line of its own inside
+   the body, or the body would end early and the remainder would run as shell
+   commands. Quoting it as <<'TAG' also stops $ and backticks expanding. */
+function heredocTag(body) {
+  let tag = 'PR_BODY';
+  const lines = String(body).split('\n');
+  for (let n = 1; lines.some(l => l.trim() === tag); n++) tag = 'PR_BODY_' + n;
+  return tag;
 }
 
 function updateDialogScript() {
@@ -909,64 +1069,113 @@ function updateDialogScript() {
   const commits  = [...srcPanel.commits.filter(c => sel.has(c.sha))].reverse();
   const branch   = document.getElementById('dialog-branch')?.value || 'cherry-pick/new-branch';
   const dir      = document.getElementById('dialog-dir')?.value    || '/tmp';
-  const repoDir  = `${dir}/${tgtPanel.repo}`;
-  const shas     = commits.map(c => c.sha).join(' \\\n  ');
+  const prTitle  = (document.getElementById('dialog-pr-title')?.value || '').trim();
+  const prBody   = document.getElementById('dialog-pr-desc')?.value || '';
+  /* Every value below reaches a shell. Repository and branch names come from
+     GitHub and may legally contain $, backticks, quotes and semicolons, and
+     the directory and branch fields are free text, so nothing is interpolated
+     unquoted. `set -euo pipefail` matters just as much: without it a failed
+     clone lets `cd` fail too and the cherry-pick lands in whatever repository
+     the user happened to be standing in. It is also what stops a conflicted
+     cherry-pick from going on to push and open a pull request. */
+  const shas = commits.map(c => c.sha).filter(h => /^[0-9a-f]{7,40}$/i.test(h));
+  const comment = v => String(v).replace(/[\r\n]/g, ' ');
+  /* The two panels can point at different repositories, which is the case this
+     page exists for. The commits then live in the source repository and simply
+     are not in the clone, so they have to be fetched before they can be
+     picked. Without this the script died on `fatal: bad object`. */
+  const crossRepo = srcPanel.org !== tgtPanel.org || srcPanel.repo !== tgtPanel.repo;
 
   const script = [
-    `#!/bin/bash`,
+    `#!/usr/bin/env bash`,
+    `set -euo pipefail`,
     ``,
-    `# Cherry-pick from ${srcPanel.org}/${srcPanel.repo} (${srcPanel.branch})`,
-    `# into a new branch based on ${tgtPanel.org}/${tgtPanel.repo} (${tgtPanel.branch})`,
+    `# Cherry-pick from ${comment(srcPanel.org)}/${comment(srcPanel.repo)} (${comment(srcPanel.branch)})`,
+    `# into a new branch based on ${comment(tgtPanel.org)}/${comment(tgtPanel.repo)} (${comment(tgtPanel.branch)})`,
     ``,
-    `CLONE_DIR="${dir}"`,
-    `NEW_BRANCH="${branch}"`,
+    `CLONE_DIR=${shellQuote(dir)}`,
+    `NEW_BRANCH=${shellQuote(branch)}`,
+    `TARGET_BRANCH=${shellQuote(tgtPanel.branch)}`,
+    `REPO_DIR="$CLONE_DIR"/${shellQuote(tgtPanel.repo)}`,
     ``,
-    `echo "Cloning ${tgtPanel.org}/${tgtPanel.repo}..."`,
-    `git clone "https://github.com/${tgtPanel.org}/${tgtPanel.repo}.git" "${repoDir}"`,
-    `cd "${repoDir}"`,
+    `echo "Cloning into $REPO_DIR ..."`,
+    `git clone ${shellQuote(`https://github.com/${tgtPanel.org}/${tgtPanel.repo}.git`)} "$REPO_DIR"`,
+    `cd "$REPO_DIR"`,
     ``,
-    `echo "Checking out ${tgtPanel.branch}..."`,
-    `git checkout "${tgtPanel.branch}"`,
+    ...(crossRepo ? [
+      `# The commits below are in a different repository, so fetch that history`,
+      `# before trying to pick from it. Only the one branch is needed.`,
+      `echo "Fetching ${comment(srcPanel.org)}/${comment(srcPanel.repo)} ..."`,
+      `git remote add cherry-src ${shellQuote(`https://github.com/${srcPanel.org}/${srcPanel.repo}.git`)}`,
+      `git fetch --no-tags cherry-src ${shellQuote(srcPanel.branch)}`,
+      ``,
+    ] : []),
+    `echo "Checking out $TARGET_BRANCH ..."`,
+    `git checkout "$TARGET_BRANCH"`,
     ``,
-    `echo "Creating new branch $NEW_BRANCH..."`,
+    `echo "Creating new branch $NEW_BRANCH ..."`,
     `git checkout -b "$NEW_BRANCH"`,
     ``,
-    `echo "Cherry-picking ${commits.length} commit(s) (oldest first)..."`,
-    `git cherry-pick \\`,
-    `  ${shas}`,
+    ...(shas.length ? [
+      `echo "Cherry-picking ${shas.length} commit(s) (oldest first)..."`,
+      `git cherry-pick \\`,
+      ...shas.map((h, i) => `  ${h}${i < shas.length - 1 ? ' \\' : ''}`),
+    ] : [
+      `echo "Nothing to cherry-pick: no usable commit ids were selected." >&2`,
+      `exit 1`,
+    ]),
     ``,
-    `echo ""`,
-    `echo "✔ Done! Branch $NEW_BRANCH is ready in: ${repoDir}"`,
-    `echo "If there were no conflicts, push with:"`,
-    `echo "  git push origin $NEW_BRANCH"`,
+    ...(prTitle ? [
+      `# A conflicted cherry-pick exits non-zero and "set -e" stops the script`,
+      `# above this line, so nothing below can publish a half-finished branch.`,
+      `# Opening the pull request needs the GitHub CLI: https://cli.github.com`,
+      `echo "Pushing $NEW_BRANCH and opening a pull request ..."`,
+      `git push -u origin "$NEW_BRANCH"`,
+      `gh pr create --repo ${shellQuote(`${tgtPanel.org}/${tgtPanel.repo}`)} \\`,
+      `  --base "$TARGET_BRANCH" \\`,
+      `  --head "$NEW_BRANCH" \\`,
+      `  --title ${shellQuote(prTitle)} \\`,
+      `  --body-file - <<'${heredocTag(prBody)}'`,
+      prBody,
+      heredocTag(prBody),
+      ``,
+      `echo ""`,
+      `echo "Done. Pull request opened from $NEW_BRANCH into $TARGET_BRANCH."`,
+    ] : [
+      `echo ""`,
+      `echo "Done. Branch $NEW_BRANCH is ready in: $REPO_DIR"`,
+      `echo "If there were no conflicts, push with:"`,
+      `echo "  git push origin $NEW_BRANCH"`,
+      `echo "Fill in a PR title above to have this script open the pull request too."`,
+    ]),
   ].join('\n');
 
   const scriptEl = document.getElementById('dialog-script');
   if (scriptEl) scriptEl.textContent = script;
 }
 
+let lastFocused = null;
 function closeDialog() {
   dialogSide = null;
+  dialogGen++;                       // a template still in flight belongs to a dialog that is gone
   const overlay = document.getElementById('dialog-overlay');
   if (overlay) overlay.style.display = 'none';
+  if (lastFocused && lastFocused.focus) lastFocused.focus();
+  lastFocused = null;
 }
 
-/* ── Init ───────────────────────────────────────────────────────────────── */
-function init() {
-  const root = document.getElementById('app');
-  const saved = localStorage.getItem(PAT_KEY);
-  if (saved) {
-    root.innerHTML = '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;color:#475569;font-size:14px">Connecting…</div>';
-    connectWithToken(saved).catch(() => {
-      localStorage.removeItem(PAT_KEY);
-      root.innerHTML = ''; root.appendChild(buildTokenScreen());
-    });
-  } else {
-    root.appendChild(buildTokenScreen());
-  }
-}
+/* ── Init ─────────────────────────────────────────────────────────────────
+   Sign-in, token storage and the token screen all live in gh-common.js, so
+   one token covers every dashboard in this suite.                         */
+GHAuth.configure({
+  icon:  '🔀',
+  title: 'Git Branch Comparator',
+  blurb: 'Visually compare commits across any two branches, even from different repositories and organizations.',
+  onConnected:    showMain,
+  onDisconnected: resetPageState,
+});
 
-init();
+GHAuth.start();
 </script>
 </body>
 </html>

@@ -1,0 +1,3011 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PR Review Tracker</title>
+  <link rel="icon" href="favicon.svg" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; connect-src https://api.github.com; img-src 'self' data:; style-src 'self' 'sha256-9fwgLHt+tTAPFsnNBYKKkvSQWtZMKllTrowwSNXkyP0='; script-src 'self' 'sha256-hhI5CNQxGz4HJyCLWzGqKL72QRFJwxFtRlsQLJ0zAe0='; base-uri 'none'; form-action 'none'" />
+  <link rel="stylesheet" href="gh-common.css" />
+  <style>
+    /* Page-specific. Tokens, shell, buttons, panels, stats, feedback, the
+       token screen and the Combobox all come from gh-common.css. */
+    .main { max-width: 93.75rem; }
+
+    /* ── Config panel ─────────────────────────────────────────────────── */
+    /* Every configuration row is the same shape: an uppercase label in a
+       fixed column, its control in the next. Consistency here is the point -
+       previously some rows had a label, some had none, and one control lived
+       outside the panel entirely. */
+    .cfg-row { display:grid; grid-template-columns:10.5rem minmax(0,1fr); gap:12px; align-items:start; padding:12px 0; border-top:1px solid var(--border); }
+    .cfg-row:first-child { padding-top:0; border-top:none; }
+    .cfg-row:last-child { padding-bottom:0; }
+    .cfg-row > .panel-label { padding-top:9px; }
+    .cfg-control { min-width:0; display:flex; flex-direction:column; gap:8px; position:relative; }
+    .cfg-inline { display:flex; flex-wrap:wrap; align-items:center; gap:18px; }
+
+    /* Things that act, or that change how the fetched data is displayed. */
+    .action-bar { display:flex; gap:14px; align-items:center; flex-wrap:wrap; margin-bottom:16px; }
+    .action-bar .spacer { flex:1 1 auto; }
+    .action-group { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+
+    /* Split button: the common action on the left, its rarer variants behind
+       the caret. The variant runs once; it does not become the new default. */
+    .split-btn { position:relative; display:inline-flex; }
+    .split-main  { border-top-right-radius:0; border-bottom-right-radius:0; }
+    .split-caret { border-top-left-radius:0; border-bottom-left-radius:0; padding-left:8px; padding-right:8px;
+                   border-left:1px solid rgba(255,255,255,0.3); }
+    .split-menu { position:absolute; top:calc(100% + 4px); right:0; z-index:9999; min-width:19rem;
+                  background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+                  box-shadow:0 10px 30px rgba(0,0,0,0.6); padding:4px; display:none; }
+    .split-menu.is-open { display:block; }
+    .split-item { display:block; width:100%; text-align:left; background:transparent; border:none;
+                  border-radius:var(--radius-sm); padding:8px 10px; cursor:pointer;
+                  color:var(--text-soft); font-size:var(--fs-md); font-family:var(--sans); }
+    .split-item:hover, .split-item.is-active { background:var(--border); color:#fff; }
+    .split-item .note { display:block; font-size:var(--fs-sm); color:var(--text-mute); margin-top:2px; line-height:1.45; white-space:normal; }
+    .split-item:hover .note, .split-item.is-active .note { color:var(--text-soft); }
+
+    .watch-row { display:grid; grid-template-columns:1fr 1fr 1fr auto; gap:8px; align-items:start; }
+    .watch-row .cell { display:flex; min-width:0; }
+    .btn-del { padding:8px 11px; border-radius:7px; border:1px solid var(--border); background:transparent; color:var(--text-faint); font-size:var(--fs-base); cursor:pointer; line-height:1; height:2.2rem; }
+    .btn-del:hover { color:var(--danger); border-color:#7f1d1d; }
+    /* Only takes up room when it has something to say. It used to reserve a
+       line under every repository row whether or not there was a note, which
+       is most of what looked like dead space between rows. */
+    .row-note { grid-column:1 / -1; font-size:var(--fs-sm); margin:2px 0 0; display:flex; align-items:center; gap:6px; }
+    .row-note:empty { display:none; }
+
+    .mini-select { padding:6px 26px 6px 10px; border-radius:7px; border:1px solid var(--border); background:var(--surface); color:var(--text-dim); font-size:var(--fs-md); cursor:pointer; appearance:none; -webkit-appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2364748b'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 9px center; }
+    .mini-select:focus { border-color:var(--accent-solid); }
+    .hint { display:inline-flex; align-items:center; justify-content:center; width:1.2em; height:1.2em; border-radius:50%; border:1px solid var(--border); color:var(--text-faint); font-size:var(--fs-2xs); cursor:help; }
+    .hint:hover { color:var(--text-dim); border-color:var(--border-hi); }
+
+    .range-opt { display:flex; align-items:center; gap:7px; font-size:var(--fs-md); color:var(--text-dim); cursor:pointer; }
+    .range-opt input[type=radio] { width:0.9em; height:0.9em; cursor:pointer; accent-color:var(--accent-solid); flex-shrink:0; }
+    .range-opt.is-off { color:var(--text-faint); }
+    .range-opt input:disabled { opacity:0.5; cursor:not-allowed; }
+    .opt { display:flex; align-items:center; gap:7px; font-size:var(--fs-md); color:var(--text-dim); }
+    .opt input[type=checkbox] { width:0.9em; height:0.9em; cursor:pointer; accent-color:var(--accent-solid); }
+    .opt input[type=text], .opt input[type=number] { padding:6px 9px; border-radius:var(--radius-sm); border:1px solid var(--border); background:var(--bg); color:var(--text); font-size:var(--fs-md); }
+    .opt input[type=text]:focus, .opt input[type=number]:focus { border-color:var(--accent-solid); }
+    .opt select { padding:6px 24px 6px 9px; border-radius:var(--radius-sm); border:1px solid var(--border); background:var(--bg); color:var(--text); font-size:var(--fs-md); cursor:pointer; appearance:none; -webkit-appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2364748b'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 8px center; }
+
+    /* Widths that used to sit in style attributes on the markup. */
+    #opt-baseline { width:18.75rem; }
+    #opt-days     { width:4rem; }
+    .err-wrap     { padding:16px; }
+
+    /* ── Toolbar / filters ────────────────────────────────────────────── */
+    /* Both token fields now sit inside the panel, on the same background. */
+    .filter-drop { position:absolute; top:calc(100% + 4px); left:0; right:0; z-index:9999; margin:0; padding:0; list-style:none; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); max-height:15.625rem; overflow-y:auto; box-shadow:0 10px 30px rgba(0,0,0,0.6); display:none; }
+    .filter-opt { padding:8px 12px; cursor:pointer; font-size:var(--fs-base); color:var(--text-soft); border-bottom:1px solid var(--bg); font-family:var(--mono); }
+    .filter-opt:last-child { border-bottom:none; }
+    .filter-opt.active, .filter-opt:hover { background:var(--border); color:#fff; }
+    .filter-opt-field { color:var(--accent); font-weight:600; }
+    .filter-chip-field { color:var(--accent); font-weight:600; }
+
+
+    /* ── PR groups / table ────────────────────────────────────────────── */
+    .group { margin-bottom:18px; }
+    /* The bar is a click target, but the repository and branch names in it are
+       text people copy. `user-select:none` on the whole bar made them
+       unselectable, so it is scoped to the parts that are only decoration. */
+    .group-head { position:relative; display:flex; align-items:center; gap:10px; padding:10px 14px; background:var(--surface); border:1px solid var(--border); border-radius:10px 10px 0 0; flex-wrap:wrap; cursor:pointer; }
+    .group-head .group-count, .group-head .group-toggle, .group-head .cutoff-chip { user-select:none; }
+    .group-progress { font-size:var(--fs-sm); color:var(--accent); font-family:var(--mono); white-space:nowrap; }
+    .group-bar { position:absolute; left:0; bottom:0; height:2px; background:var(--accent); width:0; transition:width 0.18s linear; border-bottom-left-radius:2px; }
+    .group-head:hover { background:var(--surface-hi); }
+    .group-head.collapsed { border-radius:10px; }
+    .group-toggle { border:none; background:transparent; color:var(--text-mute); cursor:pointer; font-size:var(--fs-sm); padding:0 2px; line-height:1; }
+    .group-toggle:hover { color:var(--text-soft); }
+    .stack-mark { color:var(--accent); font-size:var(--fs-md); margin-right:4px; }
+    .stack-tag { font-size:var(--fs-xs); color:var(--accent); background:rgba(129,140,248,0.10); border:1px solid rgba(129,140,248,0.28); border-radius:999px; padding:1px 7px; font-family:var(--mono); }
+    .group-title { font-size:var(--fs-base); font-weight:600; color:var(--text-soft); font-family:var(--mono); }
+    .group-branch { font-size:var(--fs-md); color:var(--accent); font-family:var(--mono); }
+    .group-count { font-size:var(--fs-sm); color:var(--text-mute); }
+    .cutoff-chip { font-size:var(--fs-xs); color:var(--accent); background:rgba(129,140,248,0.10); border:1px solid rgba(129,140,248,0.28); border-radius:999px; padding:2px 8px; font-family:var(--mono); }
+    .trunc-chip { font-size:var(--fs-xs); color:var(--warn); background:rgba(251,191,36,0.10); border:1px solid rgba(251,191,36,0.30); border-radius:999px; padding:2px 8px; font-family:var(--mono); }
+    .group-body { border:1px solid var(--border); border-top:none; border-radius:0 0 10px 10px; overflow-x:auto; }
+    table { width:100%; border-collapse:collapse; }
+    th { text-align:left; font-size:var(--fs-xs); font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-faint); padding:9px 14px; background:var(--surface-alt); border-bottom:1px solid var(--border); white-space:nowrap; }
+    td { padding:11px 14px; border-bottom:1px solid var(--surface); vertical-align:top; font-size:var(--fs-base); }
+    tr:last-child td { border-bottom:none; }
+    tr.pr-row:hover td { background:var(--surface-alt); }
+    .col-pr { min-width:17.5rem; }
+    .col-author { width:9.375rem; }
+    .col-rev { min-width:14.375rem; }
+    .col-labels { min-width:10.625rem; }
+    .col-status { width:8.125rem; }
+
+    .pr-title { font-size:var(--fs-base); font-weight:500; color:var(--text); text-decoration:none; line-height:1.45; }
+    .pr-title:hover { color:var(--accent); text-decoration:underline; }
+    .pr-num { font-family:var(--mono); font-size:var(--fs-sm); color:var(--text-faint); text-decoration:none; }
+    .pr-num:hover { color:var(--accent); }
+    .pr-meta { font-size:var(--fs-sm); color:var(--text-faint); margin-top:4px; display:flex; gap:9px; flex-wrap:wrap; align-items:center; }
+    .draft-tag { font-size:var(--fs-xs); font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-mute); border:1px solid var(--border); border-radius:4px; padding:1px 5px; }
+
+    .handle { font-family:var(--mono); font-size:var(--fs-md); color:var(--text-dim); text-decoration:none; }
+    .handle:hover { color:var(--accent); }
+
+    .chips { display:flex; flex-wrap:wrap; gap:5px; }
+    .chip { display:inline-flex; align-items:center; gap:4px; font-size:var(--fs-sm); padding:2px 8px; border-radius:999px; border:1px solid transparent; font-family:var(--mono); text-decoration:none; max-width:13.125rem; }
+    .chip:hover { filter:brightness(1.25); }
+    .chip .ico { font-size:var(--fs-2xs); }
+    .chip-approved  { background:rgba(74,222,128,0.12);  color:var(--ok); border-color:rgba(74,222,128,0.3); }
+    .chip-changes   { background:rgba(251,191,36,0.12);  color:var(--warn); border-color:rgba(251,191,36,0.3); }
+    .chip-commented { background:rgba(148,163,184,0.10); color:var(--text-dim); border-color:rgba(148,163,184,0.25); }
+    .chip-pending   { background:transparent;            color:var(--text-mute); border-color:var(--border); border-style:dashed; }
+    .chip-dismissed { background:transparent;            color:var(--text-faint); border-color:var(--border); text-decoration:line-through; }
+    .chip-label     { font-family:var(--sans); font-weight:500; }
+    .rev-group { margin-bottom:5px; }
+    .rev-group:last-child { margin-bottom:0; }
+
+    .status { display:inline-flex; align-items:center; gap:6px; font-size:var(--fs-md); font-weight:600; white-space:nowrap; }
+    .status .dot { width:0.55em; height:0.55em; border-radius:50%; flex-shrink:0; }
+
+    @media (max-width: 51.25em) {
+      .cfg-row { grid-template-columns:minmax(0,1fr); gap:6px; padding:10px 0; }
+      .cfg-row > .panel-label { padding-top:0; }
+      .watch-row { grid-template-columns:1fr 1fr; }
+      .watch-row .cell:nth-child(3) { grid-column:1 / -1; }
+      td, th { padding:9px 10px; }
+    }
+    </style>
+</head>
+<body>
+<div id="app"></div>
+<script src="gh-common.js"></script>
+<script>
+
+/* ══════════════════════════════════════════════════════════════════════════
+   PR Review Tracker
+   ─────────────────
+   A browser-only replacement for the PR Tracker Google Sheet. Every viewer
+   supplies their own GitHub token, so repo visibility is enforced by GitHub
+   itself: a private repo simply 404s for anyone whose token can't read it.
+   Nothing is ever sent to a server - PR data is fetched live from the GitHub
+   API and rendered in-page.
+
+   Persistence model:
+     - Token      → localStorage (opt-in) or sessionStorage (this tab only).
+     - Watch list → localStorage, and encodable into the URL hash so a
+                    configuration can be shared as a plain link.
+     - Reviews of merged PRs → localStorage cache (a merged PR's review
+                    state is frozen, so it never needs re-fetching).
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Storage keys ─────────────────────────────────────────────────────────
+   The token keys live in gh-common.js and are shared across dashboards; these
+   are the tracker's own. All of them are listed in gh-common's OWNED_KEYS so
+   that "Forget token" clears the cached review data too. */
+const CONFIG_KEY   = 'gh_pr_tracker_config';
+const CACHE_KEY_V1 = 'gh_pr_tracker_review_cache_v1';   // retired: held filtered lists
+const REVIEWS_KEY  = 'gh_pr_tracker_reviews_v2';
+const COMMITS_KEY  = 'gh_pr_tracker_commit_dates_v1';
+const RESULTS_KEY  = 'gh_pr_tracker_results_v1';
+const IMPORTED_KEY = 'gh_pr_tracker_imported_hash';
+
+/* ── Defaults ───────────────────────────────────────────────────────────── */
+const DEFAULT_CONFIG = {
+  watches: [],                  // [{ org, repo, branch }]
+  range: 'days',                // how much merged history: days | baseline | all
+  mergedDays: 30,               // used by the 'days' range
+  baselineCommit: '',           // used by the 'baseline' range
+  includeStacked: true,         // follow PR chains beyond the base branch
+  hideDrafts: false,
+  filters: [],                  // [{ field, value }] - one entry per field
+  denylist: 'xrplf-ai-reviewer[bot], copilot-pull-request-reviewer[bot], copilot-swe-agent[bot]',
+  autoRefreshSec: 300,          // 0 = manual only
+  collapsed: {},                // group key -> true (local only, not shared)
+};
+
+/* How often the tab may re-poll GitHub. Declared here with the other config
+   constants because `migrateConfig` snaps to it: it is the set of legal values,
+   not just the contents of a dropdown. */
+const AUTO_INTERVALS = [0, 60, 300, 900, 1800, 3600];
+
+/* The label that marks a PR cleared to land. Fixed rather than configurable:
+   one convention across the repos we track. */
+const READY_LABEL = 'Ready to Merge';
+
+const SHA_RE  = /^[0-9a-f]{7,40}$/i;
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/* Filterable fields. Everything except `title` has a bounded set of values in
+   the fetched data, so those can be auto-completed. */
+const FILTER_FIELDS = ['title', 'author', 'reviewer', 'status', 'label', 'milestone'];
+const NO_VALUE = '(none)';
+
+/* How much merged history a watched branch pulls in. One control per row,
+   because `develop` and a staging branch genuinely want different answers. */
+/* How much merged history to pull in. One setting for the whole watch list:
+   it was per-row, but in practice every row wants the same answer and the
+   two inputs it depends on were global anyway, which made the pairing
+   confusing. Open pull requests are always included. */
+const RANGES = ['all', 'baseline', 'days'];
+
+const STATUS_META = {
+  'Draft':             { color: '#9fadc0' },
+  'In Review':         { color: '#67e8f9' },
+  'Changes Requested': { color: '#fbbf24' },
+  'Approved':          { color: '#34d399' },
+  'Ready to Merge':    { color: '#4ade80' },
+  'Queued':            { color: '#818cf8' },
+  'Merged':            { color: '#a78bfa' },
+  'Reverted':          { color: '#f87171' },
+};
+
+/* ── App state ────────────────────────────────────────────────────────────
+   `app` comes from gh-common.js (token, username, orgs, connecting); these are
+   the fields only this page cares about. */
+Object.assign(app, { loading: false, lastRefresh: null, refreshIndex: 0, refreshTotal: 0,
+                     snapshotAt: null });
+
+let config  = { ...DEFAULT_CONFIG, watches: [] };
+let results = [];   // [{ key, org, repo, branch, prs, error, loading }]
+const rowUi = [];   // per-watch-row DOM refs + generation counters
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Merged-review cache
+
+   A merged PR can't collect new reviews, so its raw review history is frozen
+   and worth caching across sessions - this is the single most expensive part
+   of a refresh (one request per PR).
+
+   What gets cached is the *raw* review facts, never the derived reviewer
+   lists. Caching the derived lists means a later change to the ignore list -
+   or to how reviewer states are resolved - can never reach a merged PR again,
+   because it is never re-fetched. Storing the inputs and re-deriving on every
+   render keeps the cache a pure bandwidth optimisation with no effect on what
+   is displayed.
+   ══════════════════════════════════════════════════════════════════════════ */
+let reviewCache = (() => {
+  try { return JSON.parse(store.get(REVIEWS_KEY) || '{}'); } catch (e) { return {}; }
+})();
+
+/* The pre-v2 cache held filtered reviewer objects; drop it. */
+try { store.del(CACHE_KEY_V1); } catch (e) { /* ignore */ }
+
+/* Store only what computeReviewers reads, as compact triples. */
+function compactReviews(reviews) {
+  return (reviews || []).map(rv => [
+    (rv.user && rv.user.login) || '', rv.state || '', rv.submitted_at || '',
+  ]);
+}
+
+function expandReviews(rows) {
+  return (rows || []).map(([login, state, submitted_at]) => ({
+    user: { login }, state, submitted_at,
+  }));
+}
+
+function cacheGet(key) {
+  const hit = reviewCache[key];
+  return Array.isArray(hit) ? hit : null;      // ignore any older shape
+}
+function cacheSet(key, val) { reviewCache[key] = val; }
+function cacheFlush() {
+  const keys = Object.keys(reviewCache);
+  if (keys.length > 4000) {                          // keep the store bounded
+    const trimmed = {};
+    keys.slice(-3000).forEach(k => { trimmed[k] = reviewCache[k]; });
+    reviewCache = trimmed;
+  }
+  try { store.set(REVIEWS_KEY, JSON.stringify(reviewCache)); } catch (e) { /* non-fatal */ }
+}
+
+/* Bots that used to be excluded by default. A stored config (or an older
+   shareable link) carries whatever the default was when it was written, so an
+   addition to the default list would never reach anyone who has used the tool
+   before. Upgrade any denylist that still matches a previous default, leaving
+   hand-edited ones alone.
+
+   Comparison is order- and spacing-insensitive, so reformatting the default
+   string here can't accidentally strand existing users on an old list. */
+const LEGACY_DENYLISTS = [
+  'xrplf-ai-reviewer[bot]',
+  'xrplf-ai-reviewer[bot], copilot-pull-request-reviewer[bot]',
+];
+
+function normalizeLogins(value) {
+  return String(value || '')
+    .split(/[,\n]/).map(s => s.trim().toLowerCase()).filter(Boolean)
+    .sort().join(',');
+}
+
+function migrateDenylist(value) {
+  const normalized = normalizeLogins(value);
+  if (!normalized) return value;                       // deliberately empty
+  return LEGACY_DENYLISTS.some(l => normalizeLogins(l) === normalized)
+    ? DEFAULT_CONFIG.denylist
+    : value;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Config: localStorage + shareable URL hash
+   ══════════════════════════════════════════════════════════════════════════ */
+/* Scope values have changed shape once already (they used to be a free-text
+   "since" field holding a SHA, a date, "all" or "none"). Normalise whatever a
+   stored config or an older link carries onto the current enum. */
+function normalizeScope(value, legacyMode) {
+  const v = String(value === undefined || value === null ? '' : value).trim().toLowerCase();
+  if (v === 'all') return 'all';
+  /* "Open PRs only" is retired; those rows become the plain default. */
+  if (v === 'none' || v === 'open') return '';
+  if (RANGES.includes(v)) return v;
+  if (SHA_RE.test(v) || DATE_RE.test(v)) return 'baseline';   // was a per-row cutoff
+  switch (legacyMode) {                                       // was a global mode
+    case 'none':   return '';
+    case 'all':    return 'all';
+    case 'commit': return 'baseline';
+    case 'days':   return 'days';
+  }
+  return 'days';
+}
+
+function normalizeFilters(list, legacyMilestone) {
+  const out = [];
+  const seen = new Set();
+  const add = (field, value) => {
+    const f = String(field || '').trim().toLowerCase();
+    const v = String(value === undefined || value === null ? '' : value).trim();
+    if (!FILTER_FIELDS.includes(f) || !v || seen.has(f)) return;
+    seen.add(f);
+    out.push({ field: f, value: v });
+  };
+  (list || []).forEach(item => {
+    if (Array.isArray(item)) add(item[0], item[1]);
+    else if (item && typeof item === 'object') add(item.field, item.value);
+  });
+  /* The milestone dropdown became a filter chip. */
+  if (legacyMilestone) add('milestone', legacyMilestone === '\u0000none' ? NO_VALUE : legacyMilestone);
+  return out;
+}
+
+/* A shared link is untrusted input. Owner and repository have a known grammar,
+   so anything that isn't one is dropped rather than carried into the UI; a git
+   ref is far more permissive, so it is only stripped of control characters and
+   bounded. Escaping at the sinks is the real defence - this just stops junk
+   reaching them in the first place. */
+function safeName(v) {
+  const t = String(v === undefined || v === null ? '' : v).trim();
+  return isGhName(t) ? t : '';
+}
+function safeRef(v) {
+  return String(v === undefined || v === null ? '' : v)
+    .trim().replace(/[\u0000-\u001f\u007f]/g, '').slice(0, 255);
+}
+
+/* Collapse whatever per-row scopes an older config carried into the single
+   global range: the first row that named a real one wins, and if none did
+   (everything was "open only", or the config predates scopes) fall back to
+   the default. */
+function collapseRange(r) {
+  const explicit = normalizeScope(r.range, undefined);
+  if (r.range !== undefined && RANGES.includes(explicit)) return explicit;
+  for (const w of (r.watches || [])) {
+    const v = normalizeScope(w.scope !== undefined ? w.scope : w.since, r.mergedMode);
+    if (RANGES.includes(v)) return v;
+  }
+  return DEFAULT_CONFIG.range;
+}
+
+/* Everything a shared link can carry has to be bounded here, because a link is
+   untrusted input and this is the only gate it passes through. `mergedDays` was
+   already clamped; the two below were not.
+
+   MAX_WATCHES is generous against real use (a dozen rows is a busy board) and
+   cheap against abuse: each row builds three Comboboxes, and each Combobox holds
+   its own document-level mousedown listener, so an unbounded list makes every
+   click on the page run thousands of handlers. */
+const MAX_WATCHES = 50;
+
+function migrateConfig(raw) {
+  const r = raw || {};
+  return {
+    watches: (r.watches || []).slice(0, MAX_WATCHES).map(w => ({
+      org: safeName(w.org), repo: safeName(w.repo), branch: safeRef(w.branch),
+    })),
+    range: collapseRange(r),
+    mergedDays: clampInt(r.mergedDays, 1, 365, DEFAULT_CONFIG.mergedDays),
+    baselineCommit: typeof r.baselineCommit === 'string' ? r.baselineCommit.trim() : '',
+    includeStacked: r.includeStacked === undefined ? DEFAULT_CONFIG.includeStacked : !!r.includeStacked,
+    hideDrafts: !!r.hideDrafts,
+    filters: normalizeFilters(r.filters, r.milestoneFilter),
+    denylist: migrateDenylist(typeof r.denylist === 'string' ? r.denylist : DEFAULT_CONFIG.denylist),
+    /* Snap to an interval the dropdown actually offers. A link asking for
+       `"ar":1` would otherwise poll GitHub once a second for as long as the
+       recipient's tab is focused, quietly spending their rate limit. */
+    autoRefreshSec: AUTO_INTERVALS.includes(Number(r.autoRefreshSec))
+      ? Number(r.autoRefreshSec)
+      : DEFAULT_CONFIG.autoRefreshSec,
+    collapsed: (r.collapsed && typeof r.collapsed === 'object') ? { ...r.collapsed } : {},
+  };
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Last-results snapshot
+
+   A cold refresh takes a while, and until now a reload stared at an empty
+   table for the whole of it. The in-session behaviour was already the right
+   one - refreshAll() reuses the existing group objects so their rows stay put
+   while new data is fetched - this just extends that across reloads.
+
+   Only the fields the table actually renders are stored: the raw pull request
+   objects are an order of magnitude larger, and none of the rest is read
+   again. The snapshot is always replaced by a live fetch on load, so it is a
+   placeholder, never a source of truth.
+   ══════════════════════════════════════════════════════════════════════════ */
+/* Bumped when the fingerprint changed shape: an older snapshot is discarded
+   as out of date rather than reported as a confusing settings mismatch. */
+/* Bump whenever a stored snapshot would be wrong rather than merely old, so it
+   is discarded instead of being restored and believed.
+
+   3: revert detection was rewritten. `revertedFlag` is stored per pull request
+      and `applyDenylistToResults` derives the Reverted status straight from it
+      on restore, so a snapshot written by the old matcher would keep showing
+      its false positives (every "Bump version" marked Reverted because one of
+      them was) until the first live refresh replaced them.
+   2: the fingerprint changed shape. */
+const SNAPSHOT_VERSION = 3;
+const SNAPSHOT_MAX_AGE_MS = 7 * 86400000;
+const SNAPSHOT_MAX_BYTES = 2_000_000;
+
+/* Anything that changes what a fetch would return. A snapshot taken under
+   different settings describes a different question, so it is discarded
+   rather than shown briefly and corrected. Filters are deliberately absent:
+   they are applied at render time, so they never invalidate the data. */
+function snapshotFingerprint() {
+  /* The ignore list is deliberately absent: it is applied when the snapshot
+     is restored, so changing it does not make the stored data wrong. */
+  return JSON.stringify([
+    config.range, config.mergedDays, config.baselineCommit, config.includeStacked,
+  ]);
+}
+
+function trimPrForSnapshot(pr) {
+  const out = {
+    number: pr.number, title: pr.title, html_url: pr.html_url || '',
+    draft: !!pr.draft, merged_at: pr.merged_at || null,
+    created_at: pr.created_at || null, updated_at: pr.updated_at || null,
+  };
+  if (pr.user && pr.user.login) out.user = { login: pr.user.login };
+  const labels = (pr.labels || []).map(l => (typeof l === 'string'
+    ? { name: l }
+    : { name: l.name, color: l.color, description: l.description }));
+  if (labels.length) out.labels = labels;
+  if (pr.milestone && pr.milestone.title) out.milestone = { title: pr.milestone.title };
+  /* The unfiltered lists, not the filtered ones: the ignore list is applied
+     on restore, so a snapshot stays valid across changes to it. */
+  if (pr.reviewersAll) out.reviewersAll = pr.reviewersAll;
+  if (pr.revertedFlag) out.revertedFlag = true;
+  if (pr.reviewError) out.reviewError = pr.reviewError;
+  if (pr.stackDepth) { out.stackDepth = pr.stackDepth; out.stackParent = pr.stackParent; }
+  if (pr.base && pr.base.ref) out.base = { ref: pr.base.ref };
+  if (pr.auto_merge) {
+    out.auto_merge = {
+      merge_method: pr.auto_merge.merge_method,
+      enabled_by: pr.auto_merge.enabled_by ? { login: pr.auto_merge.enabled_by.login } : null,
+    };
+  }
+  if (pr.mergeQueue) out.mergeQueue = pr.mergeQueue;
+  return out;
+}
+
+/* What happened last time we tried to save or restore, so a failure is
+   visible instead of the board just quietly loading from scratch. */
+let snapshotNote = '';
+
+function snapshotLog(msg) {
+  snapshotNote = msg;
+  console.info('[pr-tracker] snapshot: ' + msg);
+}
+
+/* localStorage is a few megabytes for the whole origin, shared with the review
+   cache, and a busy board can exceed it. Rather than silently storing nothing,
+   give up detail until it fits: merged pull requests are history, the open
+   ones are what the board is for. */
+const SNAPSHOT_MERGED_CAPS = [Infinity, 200, 50, 0];
+
+function saveSnapshot() {
+  try {
+    const full = results
+      .filter(r => !r.error && r.prs && r.prs.length)
+      .map(r => ({
+        key: r.key, org: r.org, repo: r.repo, branch: r.branch,
+        cutoffLabel: r.cutoffLabel || '', stackedCount: r.stackedCount || 0,
+        truncated: r.truncated || '', mergeQueueError: r.mergeQueueError || '',
+        prs: r.prs.map(trimPrForSnapshot),
+      }));
+    if (!full.length) { store.del(RESULTS_KEY); snapshotLog('nothing to save'); return; }
+
+    for (const cap of SNAPSHOT_MERGED_CAPS) {
+      const groups = full.map(g => {
+        if (cap === Infinity) return g;
+        let kept = 0;
+        return { ...g, prs: g.prs.filter(pr => !pr.merged_at || ++kept <= cap) };
+      });
+      const json = JSON.stringify({
+        v: SNAPSHOT_VERSION, savedAt: Date.now(), fp: snapshotFingerprint(),
+        mergedCap: cap === Infinity ? null : cap, groups,
+      });
+      if (json.length > SNAPSHOT_MAX_BYTES) continue;
+      if (store.set(RESULTS_KEY, json)) {
+        const n = groups.reduce((t, g) => t + g.prs.length, 0);
+        snapshotLog(`saved ${n} pull requests` +
+          (cap === Infinity ? '' : `, merged history capped at ${cap} per branch to fit`));
+        return;
+      }
+      /* The write did not persist. Free the biggest neighbour and try again
+         at the same size before shedding any more detail. */
+      if (cap === SNAPSHOT_MERGED_CAPS[0]) {
+        console.info('[pr-tracker] storage full; dropping the merged-review cache to make room');
+        reviewCache = {};
+        store.del(REVIEWS_KEY);
+        if (store.set(RESULTS_KEY, json)) { snapshotLog('saved after clearing the review cache'); return; }
+      }
+    }
+    store.del(RESULTS_KEY);
+    snapshotLog('could not be saved - browser storage is full or blocked');
+  } catch (e) {
+    snapshotLog('could not be saved (' + (e && e.message) + ')');
+  }
+}
+
+/* Give up on the stored copy, and throw it away rather than leaving it to be
+   rejected again on the next load.
+
+   A snapshot that cannot be used is not going to become usable, and leaving it
+   in place has a nasty failure mode: if a later save then fails or has nothing
+   to write, the same dead blob is re-read and re-rejected on every single load,
+   so the reason never changes and it looks like saving is broken when the real
+   problem is that the old copy was never cleared. Deleting here guarantees the
+   next cycle starts from a clean slate. */
+function discardSnapshot(why) {
+  store.del(RESULTS_KEY);
+  snapshotLog(why + ' - discarded, the next refresh will save a fresh copy');
+  return [];
+}
+
+function loadSnapshot() {
+  const raw = store.get(RESULTS_KEY);
+  if (!raw) { snapshotLog('none stored yet'); return []; }
+  let payload;
+  try { payload = JSON.parse(raw); }
+  catch (e) { return discardSnapshot('stored copy is not readable JSON'); }
+
+  /* Three separate reasons, reported separately. They used to share one
+     "stored copy is from an older version", which is actively misleading when
+     the truth is a corrupt shape, and gives no way to tell a real version bump
+     from a structural problem. */
+  if (!payload || typeof payload !== 'object') {
+    return discardSnapshot('stored copy is not an object');
+  }
+  if (payload.v !== SNAPSHOT_VERSION) {
+    return discardSnapshot(`stored copy is version ${JSON.stringify(payload.v)}, this build writes version ${SNAPSHOT_VERSION}`);
+  }
+  if (!Array.isArray(payload.groups)) {
+    return discardSnapshot('stored copy has no group list');
+  }
+  if (payload.fp !== snapshotFingerprint()) {
+    return discardSnapshot(`settings changed since it was saved (was ${payload.fp}, now ${snapshotFingerprint()})`);
+  }
+  const age = Date.now() - Number(payload.savedAt || 0);
+  if (!Number.isFinite(age) || age < 0 || age > SNAPSHOT_MAX_AGE_MS) {
+    return discardSnapshot('stored copy is older than 7 days');
+  }
+
+  /* Keyed to the watch list as it stands now, and in its order, so a row
+     added or removed since does not resurrect or misplace a group. */
+  const wanted = new Set(config.watches.filter(w => w.org && w.repo && w.branch)
+    .map(w => `${w.org}/${w.repo}@${w.branch}`));
+  const byKey = new Map(payload.groups.map(g => [g.key, g]));
+  const groups = [...wanted].map(k => byKey.get(k)).filter(Boolean).map(g => ({
+    key: g.key, org: g.org, repo: g.repo, branch: g.branch,
+    prs: Array.isArray(g.prs) ? g.prs : [],
+    cutoffLabel: g.cutoffLabel || '', stackedCount: g.stackedCount || 0,
+    truncated: g.truncated || '', mergeQueueError: g.mergeQueueError || '',
+    error: '', loading: false,
+  }));
+  if (groups.length) {
+    app.snapshotAt = new Date(payload.savedAt);
+    snapshotLog(`restored ${groups.reduce((t, g) => t + g.prs.length, 0)} pull requests from ` +
+      new Date(payload.savedAt).toLocaleString());
+  } else {
+    snapshotLog('stored copy covers none of the repositories currently watched');
+  }
+  return groups;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Config: localStorage + shareable URL hash
+   ══════════════════════════════════════════════════════════════════════════ */
+function encodeConfig(cfg) {
+  const json = JSON.stringify({
+    w: cfg.watches.map(w => [w.org, w.repo, w.branch]),
+    rg: cfg.range,
+    d: cfg.mergedDays,
+    bc: cfg.baselineCommit,
+    st: cfg.includeStacked ? 1 : 0,
+    hd: cfg.hideDrafts ? 1 : 0,
+    f: cfg.filters.map(f => [f.field, f.value]),
+    dl: cfg.denylist,
+    ar: cfg.autoRefreshSec,
+  });
+  return b64EncodeUtf8(json).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function decodeConfig(str) {
+  const o = JSON.parse(b64DecodeUtf8(str.replace(/-/g, '+').replace(/_/g, '/')));
+  /* `m` (include-merged boolean) predates `mm`, which predates per-row scopes. */
+  const legacyMode = typeof o.mm === 'string' ? o.mm : (o.m === 0 ? 'none' : undefined);
+  return migrateConfig({
+    watches: (o.w || []).map(([org, repo, branch, scope]) => ({ org, repo, branch, since: scope })),
+    range: o.rg,
+    mergedMode: legacyMode,
+    mergedDays: o.d,
+    baselineCommit: o.bc,
+    includeStacked: o.st === undefined ? undefined : o.st === 1,
+    hideDrafts: o.hd === 1,
+    filters: o.f,
+    milestoneFilter: o.ms,
+    denylist: o.dl,
+    autoRefreshSec: o.ar,
+  });
+}
+
+/* A shared link is an import, not a permanent override.
+
+   It used to win on every single load, which meant that once a `#c=` was in
+   the address bar - and "Copy shareable link" puts one there for the person
+   sharing it - every later change to the watch list, the range or the ignore
+   list was written to local storage and then silently thrown away on the next
+   reload. So the link is adopted once, saved as the stored configuration, and
+   then got out of the way.
+
+   Clearing the hash is the tidy half of that and it is not always allowed:
+   `history.replaceState` throws on a `file://` page. The marker is what
+   actually guarantees the link is only ever applied once. */
+let importedFromLink = false;
+
+function loadConfig() {
+  const hash = location.hash.replace(/^#/, '');
+  const m = /(?:^|&)c=([^&]+)/.exec(hash);
+  if (m && store.get(IMPORTED_KEY) !== m[1]) {
+    try {
+      const cfg = decodeConfig(m[1]);
+      store.set(CONFIG_KEY, JSON.stringify(cfg));
+      store.set(IMPORTED_KEY, m[1]);
+      clearConfigHash();
+      importedFromLink = true;
+      return cfg;
+    } catch (e) { /* unreadable link: fall through to whatever is stored */ }
+  }
+  try {
+    const saved = JSON.parse(store.get(CONFIG_KEY) || 'null');
+    if (saved) return migrateConfig(saved);
+  } catch (e) { /* ignore */ }
+  return migrateConfig({});
+}
+
+function clearConfigHash() {
+  try { history.replaceState(null, '', location.pathname + location.search); }
+  catch (e) { /* file:// forbids this; the marker above covers us */ }
+}
+
+function saveConfig() {
+  /* Collapsed state is keyed by repo@branch and nothing ever removed an entry,
+     so rows that were watched once kept their key forever. Prune to what is
+     actually on the board before writing. */
+  const live = new Set(config.watches
+    .filter(w => w.org && w.repo && w.branch)
+    .map(w => `${w.org}/${w.repo}@${w.branch}`));
+  Object.keys(config.collapsed).forEach(k => { if (!live.has(k)) delete config.collapsed[k]; });
+  store.set(CONFIG_KEY, JSON.stringify(config));
+}
+
+/* The share link is built at the point it is copied, because the caller also
+   needs the encoded string itself to mark it as already imported. */
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Merge cutoff
+
+   "Everything merged since the previous release" is the question this tracker
+   exists to answer, and a release is identified by a commit, not a date. So a
+   cutoff may be given as a commit SHA, which is resolved to that commit's
+   date and handed to the Search API as `merged:>`, exactly as the Apps Script
+   did - GitHub does the filtering server-side rather than us paging through
+   history.
+
+   The cutoff is per watched branch, because the branches want different
+   answers: `develop` wants "since the release baseline", while a
+   `staging/N.M.x` branch wants everything that ever landed on it.
+   ══════════════════════════════════════════════════════════════════════════ */
+let commitDateCache = (() => {
+  try { return JSON.parse(store.get(COMMITS_KEY) || '{}'); } catch (e) { return {}; }
+})();
+
+async function commitDate(org, repo, sha) {
+  const key = `${org}/${repo}@${sha.toLowerCase()}`;
+  if (commitDateCache[key]) return commitDateCache[key];   // commits are immutable
+  let data;
+  try {
+    data = await ghGet(app.token, `/repos/${seg(org)}/${seg(repo)}/commits/${seg(sha)}`);
+  } catch (e) {
+    if (e.status === 404) {
+      throw new Error(`Commit ${sha.slice(0, 10)} isn't in ${org}/${repo}'s history. The baseline applies to every watched repository, so it has to be a commit they all share - otherwise use "Last N days" or "Everything".`);
+    }
+    throw e;
+  }
+  const iso = (data.commit && ((data.commit.committer && data.commit.committer.date) ||
+                               (data.commit.author && data.commit.author.date))) || null;
+  if (!iso) throw new Error(`Commit ${sha.slice(0, 10)} returned no date.`);
+  commitDateCache[key] = iso;
+  /* Bounded like the review cache is. Commits are immutable so nothing here
+     goes stale, but a baseline changes every release and the entries would
+     otherwise accumulate for the life of the browser profile, competing with
+     the board snapshot for the origin's storage quota. */
+  const keys = Object.keys(commitDateCache);
+  if (keys.length > 500) {
+    const trimmed = {};
+    keys.slice(-400).forEach(k => { trimmed[k] = commitDateCache[k]; });
+    commitDateCache = trimmed;
+  }
+  try { store.set(COMMITS_KEY, JSON.stringify(commitDateCache)); } catch (e) { /* non-fatal */ }
+  return iso;
+}
+
+/* Returns { iso, op, label } - or { iso: null } for "no merged PRs at all"
+   / "all merged PRs", distinguished by `skip`. */
+/* Turn the configured range into a merged-PR window. Open pull requests are
+   always included; this only decides how far back merged history reaches. */
+async function resolveScope(watch) {
+  switch (config.range) {
+    case 'all':
+      return { iso: null, label: 'all merged' };
+    case 'baseline': {
+      const sha = String(config.baselineCommit || '').trim();
+      if (!sha) {
+        throw new Error('No baseline commit set - fill in the SHA next to "Since commit", or pick a different range.');
+      }
+      if (!SHA_RE.test(sha)) {
+        throw new Error(`Baseline "${sha}" isn't a commit SHA.`);
+      }
+      const iso = await commitDate(watch.org, watch.repo, sha);
+      return { iso, op: '>', label: `since ${sha.slice(0, 7)} · ${iso.slice(0, 10)}` };
+    }
+    default: {
+      const iso = new Date(Date.now() - config.mergedDays * 86400000).toISOString().slice(0, 10);
+      return { iso, op: '>=', label: `merged in last ${config.mergedDays}d` };
+    }
+  }
+}
+
+/* Requirements 2 and 3 are both conditional on "if it exists" - a
+   staging/N.M.x branch that hasn't been cut yet is a normal state mid-cycle,
+   not an error, and deserves to be said out loud rather than shown as an
+   empty table. */
+async function branchExists(org, repo, branch) {
+  /* One request, always. `/branches/{branch}` takes the ref with its slashes
+     raw - that is how the endpoint is defined - so `staging/2.5.x` goes on the
+     path as-is. There used to be a percent-encoded second attempt as a fallback,
+     which only ever fired for refs containing a slash, which is precisely the
+     release branches this tool exists for. It doubled the cost of every miss,
+     and the miss is the expected state for a release branch that has not been
+     cut yet, so it also doubled the exposure to a stalled request's 30-second
+     timeout. Encoding the slash makes GitHub look for a branch whose name
+     literally contains "%2F", so it could never have rescued a real 404. */
+  try {
+    await ghGet(app.token, `/repos/${seg(org)}/${seg(repo)}/branches/${branch}`);
+    return true;
+  } catch (e) {
+    if (e.status === 404) return false;
+    throw e;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Reviewers
+
+   Three distinct populations, which the sheet couldn't express:
+     - submitted a verdict  → APPROVED / CHANGES_REQUESTED / DISMISSED
+     - commented only       → engaged, but no verdict
+     - still invited        → `requested_reviewers` (GitHub drops a user from
+                              this list the moment they submit a review, so
+                              it is exactly "hasn't responded yet")
+   ══════════════════════════════════════════════════════════════════════════ */
+/* Ignore-list matching is tolerant about the `[bot]` suffix, so both
+   `copilot-pull-request-reviewer` and `copilot-pull-request-reviewer[bot]`
+   exclude the same account - the suffix is easy to get wrong by hand, and
+   getting it wrong silently fails open. */
+function normLogin(s) {
+  return String(s || '').trim().toLowerCase().replace(/\[bot\]$/, '');
+}
+
+function makeDenyMatcher(logins) {
+  const set = new Set([...(logins || [])].map(normLogin).filter(Boolean));
+  return login => set.has(normLogin(login));
+}
+
+/* Returns every reviewer, ignore list not applied. Filtering happens later,
+   in filterReviewers(), so that editing the ignore list is a pure re-derive
+   over data already in memory rather than something that needs a refetch. */
+function computeReviewers(reviews, pr) {
+  const authorLogin = (pr.user && pr.user.login || '').toLowerCase();
+
+  const sorted = (reviews || []).slice().sort(
+    (a, b) => new Date(a.submitted_at || 0) - new Date(b.submitted_at || 0)
+  );
+
+  const verdict   = new Map();   // login → APPROVED | CHANGES_REQUESTED | DISMISSED
+  const commented = new Set();
+
+  sorted.forEach(rv => {
+    const login = rv.user && rv.user.login;
+    if (!login) return;
+    const lower = login.toLowerCase();
+    if (lower === authorLogin) return;
+    if (rv.state === 'PENDING') return;                    // unsubmitted draft review
+    if (rv.state === 'COMMENTED') { commented.add(login); return; }
+    // Latest non-COMMENTED state wins, mirroring GitHub's own PR UI: a
+    // comment left after an approval must not downgrade the approval.
+    verdict.set(login, rv.state);
+  });
+
+  const approved = [], changes = [], dismissed = [];
+  verdict.forEach((state, login) => {
+    if (state === 'APPROVED') approved.push(login);
+    else if (state === 'CHANGES_REQUESTED') changes.push(login);
+    else if (state === 'DISMISSED') dismissed.push(login);
+  });
+
+  const commentedOnly = [...commented].filter(l => !verdict.has(l));
+
+  const pending = [];
+  (pr.requested_reviewers || []).forEach(u => {
+    if (!u || !u.login) return;
+    const lower = u.login.toLowerCase();
+    if (lower === authorLogin || verdict.has(u.login)) return;
+    pending.push(u.login);
+  });
+  (pr.requested_teams || []).forEach(t => {
+    const name = t && (t.slug || t.name);
+    if (name) pending.push('@' + name);
+  });
+
+  const byName = (a, b) => a.toLowerCase().localeCompare(b.toLowerCase());
+  return {
+    approved:  approved.sort(byName),
+    changes:   changes.sort(byName),
+    commented: commentedOnly.sort(byName),
+    pending:   pending.sort(byName),
+    dismissed: dismissed.sort(byName),
+  };
+}
+
+/* The ignore list, applied to already-derived reviewer lists. Teams carry an
+   "@" prefix for display but are matched on their bare slug, the same way they
+   were when the check lived inside computeReviewers. */
+function filterReviewers(all, denySet) {
+  const isDenied = makeDenyMatcher(denySet);
+  const keep = l => !isDenied(String(l).replace(/^@/, ''));
+  const a = all || {};
+  return {
+    approved:  (a.approved  || []).filter(keep),
+    changes:   (a.changes   || []).filter(keep),
+    commented: (a.commented || []).filter(keep),
+    pending:   (a.pending   || []).filter(keep),
+    dismissed: (a.dismissed || []).filter(keep),
+  };
+}
+
+function currentDenySet() {
+  return new Set(denyList().map(x => x.toLowerCase()));
+}
+
+/* Re-apply the ignore list to everything on screen and recompute the statuses
+   it can change - an approval from an ignored reviewer should stop counting as
+   an approval. No network: the unfiltered lists are already held per PR. */
+function applyDenylistToResults() {
+  const denySet = currentDenySet();
+  results.forEach(r => {
+    (r.prs || []).forEach(pr => {
+      if (pr.reviewersAll) pr.reviewers = filterReviewers(pr.reviewersAll, denySet);
+    });
+    const reverted = new Set((r.prs || []).filter(p => p.revertedFlag).map(p => p.number));
+    (r.prs || []).forEach(pr => { pr.status = computeStatus(pr, reverted); });
+  });
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Status + revert detection (ported from the Apps Script)
+   ══════════════════════════════════════════════════════════════════════════ */
+function hasLabel(pr, name) {
+  const target = (name || '').toLowerCase();
+  if (!target) return false;
+  return (pr.labels || []).some(l => {
+    const n = typeof l === 'string' ? l : l.name;
+    return n && n.toLowerCase() === target;
+  });
+}
+
+/* Only a title that opens with `Revert "` can be a revert, so the quoted subject
+   is extracted once per candidate rather than a regular expression being built
+   per (candidate, original) pair. Anchoring at the start also stops a title that
+   merely mentions another - `Docs: how to Revert "Add retry logic" safely` -
+   from being read as one.
+
+   The trailing `"` is matched greedily so that a subject which itself contains a
+   quote survives the round trip. */
+const REVERT_RE = /^\s*revert\s+"([\s\S]*)"\s*$/i;
+
+/* What a revert title claims to be reverting: the PR number if the reverted
+   subject carries a squash-merge `(#N)` suffix, and the bare subject either way. */
+function revertTarget(pr) {
+  /* The revert's own squash suffix comes off first: a revert merged by squash is
+     titled `Revert "Fix thing (#601)" (#602)`, and the closing quote is not the
+     last character. What is left is `Revert "<subject>"`. */
+  const m = REVERT_RE.exec(stripPrSuffix(pr.title || ''));
+  if (!m) return null;
+  const subject = m[1];
+  /* Squash merges leave `(#N)` on the subject, which identifies the original
+     exactly. Merge-commit repositories do not, which is why the subject is kept
+     as a fallback. */
+  const num = /\(#(\d+)\)\s*$/.exec(subject);
+  return { number: num ? Number(num[1]) : null, subject: subject.trim() };
+}
+
+/* Which merged pull requests were later reverted.
+
+   Matching by number is exact. Matching by subject is not, so it is only used
+   when that subject is unique among the merged set: repetitive titles ("Bump
+   version", dependabot updates, "Update changelog") are common, and reverting
+   one of them used to mark every one of them as Reverted - a directly misleading
+   signal on a board whose job is saying what actually shipped.
+
+   Cost matters here too. This used to compile a regular expression for every
+   pair, which is up to 250,000 of them at the 500-merge cap, and it runs once
+   per repository per refresh on the main thread. Two linear passes and a map
+   lookup do the same work in a fraction of the time. */
+function findRevertedNumbers(prs) {
+  const merged = prs.filter(p => !!p.merged_at);
+  const out = new Set();
+
+  const reverts = [];
+  const subjectCount = new Map();
+  merged.forEach(p => {
+    const t = revertTarget(p);
+    if (t) reverts.push({ by: p.number, target: t });
+    const key = String(p.title || '').trim();
+    if (key) subjectCount.set(key, (subjectCount.get(key) || 0) + 1);
+  });
+  if (!reverts.length) return out;
+
+  const byNumber = new Map(merged.map(p => [p.number, p]));
+  const bySubject = new Map();
+  merged.forEach(p => {
+    const key = String(p.title || '').trim();
+    if (key && !bySubject.has(key)) bySubject.set(key, p);
+  });
+
+  reverts.forEach(({ by, target }) => {
+    if (target.number !== null) {
+      const hit = byNumber.get(target.number);
+      /* A PR cannot revert itself; a title quoting its own number is noise. */
+      if (hit && hit.number !== by) out.add(hit.number);
+      return;
+    }
+    if (subjectCount.get(target.subject) !== 1) return;   // ambiguous, so unusable
+    const hit = bySubject.get(target.subject);
+    if (hit && hit.number !== by) out.add(hit.number);
+  });
+  return out;
+}
+
+/* Why a PR counts as already on its way in, or '' if it isn't. Two separate
+   signals: the merge queue (GraphQL only) and auto-merge (in the REST list
+   response already). Both are reported as "Queued" - deliberately not
+   "Merging", which reads too much like "Merged" at a glance. The tooltip says
+   which of the two it actually is. */
+function queuedReason(pr) {
+  if (pr.mergeQueue) {
+    return pr.mergeQueue.position != null
+      ? `In the merge queue, position ${pr.mergeQueue.position}`
+      : 'In the merge queue';
+  }
+  if (pr.auto_merge) {
+    const who = pr.auto_merge.enabled_by && pr.auto_merge.enabled_by.login;
+    const how = pr.auto_merge.merge_method;
+    return 'Auto-merge enabled' + (how ? ` (${how})` : '') + (who ? ` by ${who}` : '');
+  }
+  return '';
+}
+
+function computeStatus(pr, reverted) {
+  if (pr.merged_at) return reverted.has(pr.number) ? 'Reverted' : 'Merged';
+  if (pr.draft) return 'Draft';
+  /* Ranked above the Ready-to-Merge label: both mean "cleared to land", but
+     this one is GitHub's own state rather than a hand-applied convention. */
+  if (queuedReason(pr)) return 'Queued';
+  if (hasLabel(pr, READY_LABEL)) return 'Ready to Merge';
+  if (pr.reviewers && pr.reviewers.changes.length) return 'Changes Requested';
+  if (pr.reviewers && pr.reviewers.approved.length) return 'Approved';
+  return 'In Review';
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Fetching
+   ══════════════════════════════════════════════════════════════════════════ */
+function normalizeSearchItem(item) {
+  return {
+    number: item.number,
+    title: item.title,
+    html_url: item.html_url,
+    state: item.state,
+    draft: !!item.draft,
+    merged_at: item.pull_request ? item.pull_request.merged_at : null,
+    created_at: item.created_at,
+    updated_at: item.updated_at,
+    user: item.user,
+    labels: item.labels || [],
+    body: item.body,
+    milestone: item.milestone,
+    requested_reviewers: [],       // not exposed by search/issues, and
+                                   // irrelevant for merged PRs anyway
+    requested_teams: [],
+  };
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Stacked pull requests
+
+   A stack is a chain (or tree) of PRs where each one targets the previous
+   one's head branch instead of the release branch. Only the bottom of the
+   stack shows up under `base:develop`, so the rest would be invisible.
+
+   Closure: start with the PRs that target the watched branch, then repeatedly
+   pull in PRs whose base is the head of something already included, until
+   nothing new appears. `seen` also makes a circular base/head relationship
+   terminate rather than spin.
+   ══════════════════════════════════════════════════════════════════════════ */
+function collectStack(allOpen, baseBranch, includeStacked) {
+  const byBase = new Map();
+  allOpen.forEach(pr => {
+    const b = pr.base && pr.base.ref;
+    if (!b) return;
+    if (!byBase.has(b)) byBase.set(b, []);
+    byBase.get(b).push(pr);
+  });
+
+  /* Clone: the open-PR list is shared between watch rows for the same repo,
+     and each row annotates its own depth/status onto the objects. */
+  const direct = (byBase.get(baseBranch) || []).map(pr => ({ ...pr, stackDepth: 0, stackParent: null }));
+  if (!includeStacked) return direct;
+
+  /* A PR only counts as stacked on a parent if it targets the parent's head
+     branch *in this repository*. Matching on ref name alone is wrong the
+     moment a fork is involved: an outside contributor working on their own
+     fork's `main` produces head.ref === 'main', and every PR targeting the
+     upstream `main` would then be pulled in as its children - none of which
+     target the watched branch at all. Where the head repo is missing (a
+     deleted fork) the chain stops, which is the safe direction. */
+  const stackableHead = pr => {
+    const headRef  = pr.head && pr.head.ref;
+    const headRepo = pr.head && pr.head.repo && pr.head.repo.full_name;
+    const baseRepo = pr.base && pr.base.repo && pr.base.repo.full_name;
+    if (!headRef || !headRepo || !baseRepo) return null;
+    return headRepo === baseRepo ? headRef : null;
+  };
+
+  const out = direct.slice();
+  const seen = new Set(out.map(p => p.number));
+  let frontier = direct;
+  while (frontier.length) {
+    const next = [];
+    frontier.forEach(parent => {
+      const head = stackableHead(parent);
+      if (!head) return;
+      (byBase.get(head) || []).forEach(child => {
+        if (seen.has(child.number)) return;
+        seen.add(child.number);
+        const clone = { ...child, stackDepth: parent.stackDepth + 1, stackParent: parent.number };
+        next.push(clone);
+        out.push(clone);
+      });
+    });
+    frontier = next;
+  }
+  return out;
+}
+
+/* Open PRs are fetched per repo, not per watched branch: stack closure needs
+   every open PR regardless of base, and two rows on the same repo should not
+   pay for it twice. Cleared at the start of each refresh. */
+let openPrCache = new Map();
+
+/* ── Merge queue ──────────────────────────────────────────────────────────
+   The REST pull-request object carries `auto_merge` but says nothing about the
+   merge queue, so queue state needs one GraphQL query per repository. It is
+   strictly best effort: a token that cannot reach the GraphQL endpoint still
+   gets auto-merge detection from REST, and the group says so rather than
+   quietly reporting the wrong status. */
+let mergeQueueCache = new Map();
+
+const MERGE_QUEUE_QUERY = `
+query($owner:String!,$name:String!,$cursor:String){
+  repository(owner:$owner,name:$name){
+    pullRequests(states:OPEN, first:100, after:$cursor){
+      nodes{ number isInMergeQueue mergeQueueEntry{ position } }
+      pageInfo{ hasNextPage endCursor }
+    }
+  }
+}`;
+
+function fetchMergeQueue(org, repo) {
+  const key = `${org}/${repo}`;
+  if (!mergeQueueCache.has(key)) {
+    const p = (async () => {
+      const queued = new Map();
+      let cursor = null;
+      for (let page = 0; page < 5; page++) {
+        const d = await ghGraphQL(app.token, MERGE_QUEUE_QUERY, { owner: org, name: repo, cursor });
+        const conn = d && d.repository && d.repository.pullRequests;
+        if (!conn) break;
+        (conn.nodes || []).forEach(n => {
+          if (n && n.isInMergeQueue) {
+            queued.set(n.number, { position: n.mergeQueueEntry ? n.mergeQueueEntry.position : null });
+          }
+        });
+        if (!conn.pageInfo || !conn.pageInfo.hasNextPage) break;
+        cursor = conn.pageInfo.endCursor;
+      }
+      return { queued, error: '' };
+    })().catch(e => ({ queued: new Map(), error: e.message || 'unavailable' }));
+    mergeQueueCache.set(key, p);
+  }
+  return mergeQueueCache.get(key);
+}
+
+function fetchOpenPrs(org, repo, onPage) {
+  const key = `${org}/${repo}`;
+  if (!openPrCache.has(key)) {
+    openPrCache.set(key, ghGetAll(app.token, `/repos/${seg(org)}/${seg(repo)}/pulls`, { state: 'open' }, 10, onPage));
+  }
+  return openPrCache.get(key);
+}
+
+/* Open PRs first, each followed by its stack; then merged, newest first. */
+function orderPrs(prs) {
+  const open = prs.filter(p => !p.merged_at);
+  const merged = prs.filter(p => !!p.merged_at);
+  const kids = new Map();
+  open.forEach(p => {
+    const k = p.stackParent == null ? 'root' : p.stackParent;
+    if (!kids.has(k)) kids.set(k, []);
+    kids.get(k).push(p);
+  });
+  const byUpdated = (a, b) =>
+    new Date(b.updated_at || b.created_at || 0) - new Date(a.updated_at || a.created_at || 0);
+  const ordered = [];
+  const placed = new Set();
+  (function walk(key) {
+    (kids.get(key) || []).sort(byUpdated).forEach(p => {
+      if (placed.has(p.number)) return;
+      placed.add(p.number);
+      ordered.push(p);
+      walk(p.number);
+    });
+  })('root');
+  open.forEach(p => { if (!placed.has(p.number)) ordered.push(p); });   // orphans
+  merged.sort((a, b) => new Date(b.merged_at || 0) - new Date(a.merged_at || 0));
+  return [...ordered, ...merged];
+}
+
+/* Live per-group progress.
+
+   Written straight into the group header's existing nodes rather than going
+   through paintResults(), which tears down and rebuilds every row: that costs
+   tens of milliseconds on a large board and would run once per pull request.
+   buildGroup() renders whatever the current values are, so a repaint midway
+   through picks up seamlessly. */
+function progressLabel(r) {
+  if (!r || !r.phase) return '';
+  if (r.progressTotal) return `${r.phase} ${r.progressDone}/${r.progressTotal}`;
+  if (r.progressDone) return `${r.phase} ${r.progressDone.toLocaleString()}`;
+  return r.phase;
+}
+
+function setProgress(r, phase, done, total) {
+  if (!r) return;
+  r.phase = phase || '';
+  r.progressDone = done || 0;
+  r.progressTotal = total || 0;
+  const el = r._progressEl;
+  if (el && el.isConnected) el.textContent = progressLabel(r);
+  const bar = r._progressBar;
+  if (bar && bar.isConnected) {
+    const pct = r.progressTotal > 0 ? Math.min(100, Math.round((r.progressDone / r.progressTotal) * 100)) : 0;
+    bar.style.width = pct + '%';
+  }
+}
+
+async function fetchWatch(watch, r) {
+  const { org, repo, branch } = watch;
+  const prs = [];
+
+  /* Resolve the range before anything else, so a missing baseline is reported
+     against this row rather than silently widening the window. */
+  setProgress(r, 'resolving range');
+  const scope = await resolveScope(watch);
+  if (r) r.cutoffLabel = scope.label;
+
+  setProgress(r, 'checking branch');
+  if (!await branchExists(org, repo, branch)) {
+    if (r) r.branchMissing = true;
+    return [];
+  }
+
+  if (r) r.truncated = '';
+
+  /* Open PRs, merge-queue state and merged history are independent of one
+     another, so they go out together. Only the branch check above gates them.
+     Run in sequence this was four round trips of dead time per repository
+     before the expensive part - one review request per pull request - could
+     even start, and `refreshAll` walks repositories one at a time on top of
+     that. Nothing here costs an extra request; they just stop queueing.
+
+     Progress reporting names the slowest of the three, since that is what the
+     viewer is actually waiting on. */
+  setProgress(r, 'open pull requests');
+  const mergedQuery = scope.skip ? null : [
+    `repo:${org}/${repo}`, 'is:pr', 'is:merged', `base:${branch}`,
+    scope.iso ? `merged:${scope.op}${scope.iso}` : '',
+  ].filter(Boolean).join(' ');
+
+  const [allOpen, mq, items] = await Promise.all([
+    fetchOpenPrs(org, repo, (page, n) => setProgress(r, 'open pull requests', n)),
+    fetchMergeQueue(org, repo),
+    mergedQuery === null ? Promise.resolve([]) : ghSearchIssues(app.token, mergedQuery, 5,
+      (page, n, total) => setProgress(r, 'merged pull requests', n, total ? Math.min(total, 500) : 0)),
+  ]);
+
+  if (r && allOpen.truncated) r.truncated = 'first 1,000 open PRs';
+  const openInScope = collectStack(allOpen, branch, config.includeStacked);
+  if (r) r.stackedCount = openInScope.filter(p => p.stackDepth > 0).length;
+
+  /* auto_merge already came back with the REST payload; only the queue had to
+     be asked for separately. */
+  openInScope.forEach(pr => {
+    const q = mq.queued.get(pr.number);
+    if (q) pr.mergeQueue = q;
+  });
+  if (r) r.mergeQueueError = mq.error;
+
+  prs.push(...openInScope);
+
+  if (r && items.truncated) {
+    r.truncated = r.truncated
+      ? `${r.truncated}; most recent 500 merges`
+      : 'most recent 500 merges';
+  }
+  const seen = new Set(prs.map(p => p.number));
+  items.forEach(it => { if (!seen.has(it.number)) prs.push(normalizeSearchItem(it)); });
+
+  /* Reviews: one request per PR, pooled, and cached for merged PRs. This is
+     the long pole of a cold refresh, so it reports per pull request. */
+  let reviewsDone = 0;
+  setProgress(r, 'reviews', 0, prs.length);
+  await mapPool(prs, 6, async (pr) => {
+    const cacheKey = `${org}/${repo}#${pr.number}`;
+    try {
+      if (pr.merged_at) {
+        const hit = cacheGet(cacheKey);
+        /* Re-derive from the cached raw reviews, so the current ignore list is
+           always applied even though the PR is never re-fetched. */
+        if (hit) { pr.reviewersAll = computeReviewers(expandReviews(hit), pr); return; }
+      }
+      try {
+        const reviews = await ghGetAll(app.token, `/repos/${seg(org)}/${seg(repo)}/pulls/${pr.number}/reviews`, {}, 3);
+        pr.reviewersAll = computeReviewers(reviews, pr);
+        if (pr.merged_at) cacheSet(cacheKey, compactReviews(reviews));
+      } catch (e) {
+        pr.reviewersAll = { approved: [], changes: [], commented: [], pending: [], dismissed: [] };
+        pr.reviewError = e.message;
+      }
+    } finally {
+      setProgress(r, 'reviews', ++reviewsDone, prs.length);
+    }
+  });
+
+  setProgress(r, 'sorting');
+  const reverted = findRevertedNumbers(prs);
+  const denySet = currentDenySet();
+  prs.forEach(pr => {
+    pr.revertedFlag = reverted.has(pr.number);
+    pr.reviewers = filterReviewers(pr.reviewersAll, denySet);
+    pr.status = computeStatus(pr, reverted);
+  });
+
+  const ordered = orderPrs(prs);
+  setProgress(r, '');
+  return ordered;
+}
+
+/* Identifies the current run. A run that is superseded (the page came back
+   from the back/forward cache, or the user signed out) must not write its
+   results over the new one when its promises finally settle. */
+let refreshRun = 0;
+
+/* Give up on whatever is in flight and unlock the UI. Anything still pending
+   from the abandoned run is discarded when it lands. */
+function abandonRefresh() {
+  refreshRun++;
+  app.loading = false;
+  app.refreshIndex = 0;
+  app.refreshTotal = 0;
+  results.forEach(r => { r.loading = false; r.phase = ''; r.progressDone = 0; r.progressTotal = 0; });
+}
+
+async function refreshAll() {
+  if (app.loading) return;                 // never let a timer overlap a run
+  if (!app.token) return;                  // a cached board may be up pre-sign-in
+  const myRun = ++refreshRun;
+  const keyOf = w => `${w.org}/${w.repo}@${w.branch}`;
+  /* With the range no longer per row, two rows naming the same branch are
+     indistinguishable, so only the first is fetched and rendered. */
+  const seenKey = new Set();
+  const valid = config.watches.filter(w => {
+    if (!w.org || !w.repo || !w.branch) return false;
+    const k = keyOf(w);
+    if (seenKey.has(k)) return false;
+    seenKey.add(k);
+    return true;
+  });
+
+  /* Reuse the existing group objects so their already-fetched PRs stay on
+     screen while the new data is being fetched. A refresh that blanked the
+     table first would make every poll feel like a page reload. */
+  results = valid.map(w => {
+    const key = keyOf(w);
+    const prev = results.find(r => r.key === key);
+    const base = prev || { key, prs: [], cutoffLabel: '', stackedCount: 0, truncated: '', mergeQueueError: '' };
+    return Object.assign(base, {
+      org: w.org, repo: w.repo, branch: w.branch,
+      error: '', loading: true, branchMissing: false,
+    });
+  });
+
+  app.loading = true;
+  app.refreshIndex = 0;
+  app.refreshTotal = results.length;
+  openPrCache = new Map();
+  mergeQueueCache = new Map();
+  paintToolbar();
+  paintResults();
+
+  /* Repos in sequence so a slow one can't starve the others of the shared
+     per-PR pool, and so each group updates as soon as it is ready.
+
+     The whole loop is wrapped so that `app.loading` is released no matter how
+     it ends. Without that, a single unexpected throw leaves the Refresh button
+     disabled, the auto-refresh countdown frozen and every later refreshAll()
+     returning at the guard above - the page is dead until it is reloaded. */
+  try {
+    for (const r of results) {
+      if (myRun !== refreshRun) return;    // superseded; drop this run silently
+      app.refreshIndex += 1;
+      paintToolbar();
+      try {
+        const fetched = await fetchWatch(r, r);
+        r.prs = fetched;                   // swapped in atomically per group
+      } catch (e) {
+        r.error = e.status === 404
+          ? `Not found - either the repo or the branch \`${r.branch}\` doesn't exist, or your token can't see it.`
+          : e.message;
+        r.prs = [];
+      }
+      r.loading = false;
+      /* A rendering fault in one group must not abandon the repos after it. */
+      try { paintResults(); } catch (e) { console.error('paintResults failed', e); }
+    }
+  } finally {
+    if (myRun === refreshRun) {
+      results.forEach(r => { r.loading = false; r.phase = ''; r.progressDone = 0; r.progressTotal = 0; });
+      app.refreshIndex = 0; app.refreshTotal = 0;
+      app.snapshotAt = null;              // live data supersedes the placeholder
+      saveSnapshot();
+      try { cacheFlush(); } catch (e) { console.error('cacheFlush failed', e); }
+      app.loading = false;
+      app.lastRefresh = new Date();
+      resetAutoCountdown();
+      paintToolbar();
+      paintResults();
+    }
+  }
+}
+
+/* Discard any group that no longer corresponds to a configured watch row.
+   `results` is what the stats bar, the table and the CSV export all read, so
+   anything that edits the watch list outside of a refresh has to call this or
+   those three go out of sync with each other. */
+function pruneResults() {
+  const live = new Set(config.watches
+    .filter(w => w.org && w.repo && w.branch)
+    .map(w => `${w.org}/${w.repo}@${w.branch}`));
+  results = results.filter(r => live.has(r.key));
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Auto-refresh
+
+   There is no server to keep the data warm, so "kept up to date" means this
+   tab re-polls GitHub on a timer. Three rules keep that from being wasteful:
+
+     - The countdown only runs while the tab is actually visible. A dashboard
+       left open on a second monitor for a week would otherwise burn thousands
+       of API calls per day for nobody's benefit.
+     - Coming back to a stale tab refreshes immediately, rather than showing
+       hours-old data until the frozen countdown happens to elapse.
+
+   There used to be a third rule here, holding off when the rate limit looked
+   nearly spent. It relied on a remaining-calls figure that turned out not to
+   be trustworthy, so it is gone with the rest of that tracking; a genuinely
+   exhausted limit now surfaces as a 403 on the row that hit it, which ghGet
+   retries once when GitHub says how long to wait.
+   ══════════════════════════════════════════════════════════════════════════ */
+const auto = { remainingMs: 0, timer: null };
+
+function autoLabel(sec) {
+  if (!sec) return 'Manual only';
+  if (sec < 60) return `Every ${sec}s`;
+  const m = sec / 60;
+  return `Every ${Number.isInteger(m) ? m : m.toFixed(1)} min`;
+}
+
+function startAutoRefresh() {
+  stopAutoRefresh();
+  if (!config.autoRefreshSec) { paintAutoStatus(); return; }
+  auto.remainingMs = config.autoRefreshSec * 1000;
+  auto.timer = setInterval(autoTick, 1000);
+  paintAutoStatus();
+}
+
+function stopAutoRefresh() {
+  if (auto.timer) clearInterval(auto.timer);
+  auto.timer = null;
+}
+
+function resetAutoCountdown() {
+  if (auto.timer) auto.remainingMs = config.autoRefreshSec * 1000;
+  paintAutoStatus();
+}
+
+function autoTick() {
+  if (!config.autoRefreshSec) { stopAutoRefresh(); paintAutoStatus(); return; }
+
+  /* Freeze the countdown while hidden or already refreshing. */
+  if (isHidden() || app.loading) { paintAutoStatus(); return; }
+
+  auto.remainingMs -= 1000;
+  if (auto.remainingMs > 0) { paintAutoStatus(); return; }
+
+  auto.remainingMs = config.autoRefreshSec * 1000;
+  refreshAll();
+}
+
+function isHidden() {
+  return typeof document.hidden === 'boolean' ? document.hidden : false;
+}
+
+/* Returning to a tab that's been in the background: the countdown was frozen,
+   so refresh straight away if what's on screen is older than one interval. */
+function onVisibilityChange() {
+  if (isHidden() || !config.autoRefreshSec || app.loading) return;
+  const age = app.lastRefresh ? Date.now() - app.lastRefresh.getTime() : Infinity;
+  if (age >= config.autoRefreshSec * 1000) {
+    auto.remainingMs = config.autoRefreshSec * 1000;
+    refreshAll();
+  } else {
+    paintAutoStatus();
+  }
+}
+
+function paintAutoStatus() {
+  const el = ui.autoStatus;
+  if (!el) return;
+  if (!config.autoRefreshSec) { el.textContent = ''; return; }
+  if (app.loading) { el.textContent = ''; return; }
+  el.style.color = 'var(--text-faint)';
+  if (isHidden()) { el.textContent = '· paused'; return; }
+  const s = Math.max(0, Math.ceil(auto.remainingMs / 1000));
+  el.textContent = s >= 60
+    ? `· next in ${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s`
+    : `· next in ${s}s`;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Main scaffold
+   ══════════════════════════════════════════════════════════════════════════ */
+const ui = {};
+
+function showMain() {
+  const root = document.getElementById('app');
+  root.innerHTML = '';
+
+  const main = document.createElement('div');
+  main.className = 'main';
+
+  /* Header */
+  const header = document.createElement('div');
+  header.className = 'header';
+  header.innerHTML = `
+    <span class="header-icon">📋</span>
+    <h1>PR Review Tracker</h1>
+    <div class="grow"></div>
+    ${ghHomeLinkHtml()}
+    ${ghHeaderTailHtml()}`;
+  wireHeaderTail(header);
+  main.appendChild(header);
+
+  /* Config panel */
+  ui.configPanel = document.createElement('div');
+  ui.configPanel.className = 'panel';
+  main.appendChild(ui.configPanel);
+
+  /* Toolbar */
+  ui.toolbar = document.createElement('div');
+  ui.toolbar.className = 'toolbar';
+  main.appendChild(ui.toolbar);
+
+  /* Stats + results */
+  ui.stats = document.createElement('div');
+  main.appendChild(ui.stats);
+  ui.results = document.createElement('div');
+  main.appendChild(ui.results);
+
+  root.appendChild(main);
+
+  if (!config.watches.length) config.watches.push({ org: '', repo: '', branch: '' });
+
+  paintConfig();
+  buildToolbar();
+  paintResults();
+  startAutoRefresh();
+
+  document.addEventListener('visibilitychange', onVisibilityChange);
+  window.addEventListener('pageshow', onPageShow);
+}
+
+/* Navigating away freezes the page; coming back through the back/forward
+   cache restores it with its JavaScript state intact, but any request that
+   was in flight is gone and will never settle. Abandon that run and start a
+   clean one, rather than sitting on a spinner forever. */
+function onPageShow(e) {
+  if (!e.persisted) return;
+  abandonRefresh();
+  paintToolbar();
+  paintResults();
+  if (config.watches.some(w => w.org && w.repo && w.branch)) refreshAll();
+}
+
+/* ── Config panel ───────────────────────────────────────────────────────── */
+/* Every Combobox holds a document-level listener; repainting the panel
+   without destroying the old ones leaks both the listeners and the detached
+   rows they close over. */
+function destroyWatchRowCombos() {
+  rowUi.forEach(r => {
+    if (!r) return;
+    [r.orgCombo, r.repoCombo, r.branchCombo].forEach(c => { if (c) c.destroy(); });
+  });
+  rowUi.length = 0;
+}
+
+function paintConfig() {
+  const p = ui.configPanel;
+  destroyWatchRowCombos();
+  p.innerHTML = '';
+
+  /* One shape for every row: label in the left column, control in the right. */
+  const cfgRow = (label) => {
+    const row = document.createElement('div');
+    row.className = 'cfg-row';
+    const lbl = document.createElement('span');
+    lbl.className = 'panel-label';
+    lbl.textContent = label;
+    const control = document.createElement('div');
+    control.className = 'cfg-control';
+    row.append(lbl, control);
+    p.appendChild(row);
+    return control;
+  };
+
+  /* ── Repositories ────────────────────────────────────────────────────── */
+  const repos = cfgRow('Repositories');
+  config.watches.forEach((w, i) => repos.appendChild(buildWatchRow(w, i)));
+  const addWrap = document.createElement('div');
+  const add = document.createElement('button');
+  add.className = 'btn-sm';
+  add.textContent = '+ Add repository';
+  add.addEventListener('click', () => {
+    config.watches.push({ org: '', repo: '', branch: '' });
+    saveConfig();
+    paintConfig();
+  });
+  addWrap.appendChild(add);
+  repos.appendChild(addWrap);
+
+  /* ── Merged history ──────────────────────────────────────────────────── */
+  const rangeCell = cfgRow('Merged history');
+  const range = document.createElement('div');
+  range.className = 'cfg-inline';
+  range.setAttribute('role', 'radiogroup');
+  range.setAttribute('aria-label', 'How much merged history to include');
+  range.innerHTML = `
+    <label class="range-opt" id="rng-all">
+      <input type="radio" name="gh-range" value="all" /> Everything
+    </label>
+    <label class="range-opt" id="rng-baseline">
+      <input type="radio" name="gh-range" value="baseline" /> Since commit
+      <input type="text" id="opt-baseline" spellcheck="false"
+             placeholder="SHA of the previous release" />
+    </label>
+    <label class="range-opt" id="rng-days">
+      <input type="radio" name="gh-range" value="days" /> Last
+      <input type="number" id="opt-days" min="1" max="365" /> days
+    </label>`;
+  rangeCell.appendChild(range);
+
+  const oB = range.querySelector('#opt-baseline');
+  const oD = range.querySelector('#opt-days');
+  oB.value = config.baselineCommit;
+  oD.value = config.mergedDays;
+  range.querySelectorAll('input[type=radio]').forEach(radio => {
+    radio.checked = radio.value === config.range;
+    radio.addEventListener('change', () => {
+      if (!radio.checked) return;
+      config.range = radio.value;
+      saveConfig();
+      markRangeInputs();
+      /* Focus the field the new choice depends on, so choosing a range and
+         typing its value is one movement. */
+      const field = radio.value === 'baseline' ? oB : radio.value === 'days' ? oD : null;
+      if (field) { field.focus(); field.select(); }
+      scheduleRefetch();
+    });
+  });
+  oB.addEventListener('change', () => {
+    config.baselineCommit = oB.value.trim(); saveConfig(); scheduleRefetch();
+  });
+  oD.addEventListener('change', () => {
+    config.mergedDays = Math.max(1, Math.min(365, Number(oD.value) || 30));
+    oD.value = config.mergedDays;
+    saveConfig();
+    scheduleRefetch();
+  });
+
+  /* ── Ignore reviewers ────────────────────────────────────────────────── */
+  const denyCell = cfgRow('Ignore reviewers');
+  denyCell.innerHTML = `
+    <div class="gh-tokens" id="deny-field"></div>
+    <datalist id="deny-suggestions"></datalist>`;
+
+  /* ── Filter ──────────────────────────────────────────────────────────── */
+  buildFilterField(cfgRow('Filter'));
+
+  paintDenyChips();
+  paintFilterChips();
+  markRangeInputs();
+}
+
+/* The filter is a token field exactly like the ignore list, so it lives in the
+   same panel and is labelled the same way. Its dropdown anchors to the control
+   column, which is the positioned ancestor. */
+function buildFilterField(cell) {
+  const field = document.createElement('div');
+  field.className = 'gh-tokens';
+  field.id = 'filter-field';
+
+  /* The dropdown is anchored to the input, not the whole row, so it lines up
+     with the box it is completing rather than stretching past the chips. */
+  const wrap = document.createElement('span');
+  wrap.className = 'gh-token-inputwrap';
+
+  const input = document.createElement('input');
+  input.className = 'gh-token-input';
+  input.id = 'filter-input';
+  input.type = 'text';
+  input.spellcheck = false;
+  input.autocomplete = 'off';
+  input.title = 'Fields: ' + FILTER_FIELDS.join(', ') +
+    '. Tab completes, Enter applies. Picking from the list matches that value exactly; ' +
+    'typing plain text matches anything containing it. Quote a value yourself for an exact match.';
+
+  const drop = document.createElement('ul');
+  drop.className = 'filter-drop';
+  wrap.append(input, drop);
+  field.appendChild(wrap);
+  cell.appendChild(field);
+
+  ui.filterInput = input;
+  ui.filterDrop = drop;
+  ui.filterField = field;
+  wireFilterInput(input, drop);
+}
+
+/* ── Ignored reviewers ────────────────────────────────────────────────────
+   Held as a comma-separated string because that is what the shareable link,
+   the stored config and the legacy-default migration all already speak; the
+   list below is just its parsed form. GitHub logins cannot contain a comma,
+   so nothing is lost in the round trip. */
+function denyList() {
+  return String(config.denylist || '').split(/[,\n]/).map(x => x.trim()).filter(Boolean);
+}
+function setDenyList(list) {
+  config.denylist = list.join(', ');
+  saveConfig();
+}
+
+/* Editing the ignore list needs no network at all: every pull request keeps
+   its unfiltered reviewer lists, so the change is a re-derive over data
+   already in memory. */
+function applyDenylistNow() {
+  applyDenylistToResults();
+  paintResults();
+  paintToolbar();
+  saveSnapshot();
+}
+let refetchTimer = null;
+function scheduleRefetch() {
+  clearTimeout(refetchTimer);
+  refetchTimer = setTimeout(() => { if (results.length) refreshAll(); }, 700);
+}
+
+/* `refocus` says whether the caret should come back to the box afterwards. It is
+   true when the viewer committed deliberately, with Enter or a comma, and they
+   are plainly still adding names. It must be false when the commit came from
+   losing focus, because they are on their way somewhere else and putting the
+   caret back would drag them into a field they just left. */
+function addDeny(input, refocus) {
+  /* Split on commas too, so pasting an old comma-separated list still works. */
+  const parts = input.value.split(/[,\n]/).map(x => x.trim().replace(/^@/, '')).filter(Boolean);
+  input.value = '';
+  if (!parts.length) return;
+  const list = denyList();
+  const seen = new Set(list.map(normLogin));
+  let added = false;
+  parts.forEach(name => {
+    const k = normLogin(name);
+    if (!k || seen.has(k)) return;      // normLogin ignores a [bot] suffix, so
+    seen.add(k);                        // "copilot" and "copilot[bot]" are one
+    list.push(name);
+    added = true;
+  });
+  if (!added) { paintDenyChips(refocus); return; }
+  setDenyList(list);
+  paintDenyChips(refocus);
+  applyDenylistNow();
+}
+
+function removeDeny(login) {
+  setDenyList(denyList().filter(l => l !== login));
+  paintDenyChips(true);
+  applyDenylistNow();
+}
+
+function paintDenyChips(refocus) {
+  const box = document.getElementById('deny-field');
+  if (!box) return;
+  const list = denyList();
+  box.innerHTML = '';
+
+  const wrap = document.createElement('span');
+  wrap.className = 'gh-token-inputwrap';
+  const input = document.createElement('input');
+  input.className = 'gh-token-input';
+  input.type = 'text';
+  input.spellcheck = false;
+  input.autocomplete = 'off';
+  input.setAttribute('list', 'deny-suggestions');
+  input.setAttribute('aria-label', 'Add a reviewer to ignore');
+  input.placeholder = 'Ignore a reviewer - e.g. some-bot[bot]';
+  input.title = 'GitHub logins to leave out of the reviewer column. The [bot] suffix is optional.';
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addDeny(input, true); return; }
+    /* Backspace on an empty box removes the last chip, as in the filter bar. */
+    if (e.key === 'Backspace' && !input.value && list.length) {
+      e.preventDefault();
+      removeDeny(list[list.length - 1]);
+    }
+  });
+  input.addEventListener('blur', () => addDeny(input, false));
+  wrap.appendChild(input);
+  box.appendChild(wrap);
+  if (refocus) input.focus();
+
+  list.forEach(login => {
+    const chip = document.createElement('span');
+    chip.className = 'gh-token is-exclude';
+    const x = document.createElement('button');
+    x.className = 'gh-token-x';
+    x.type = 'button';
+    x.textContent = '×';
+    x.title = `Stop ignoring ${login}`;
+    x.setAttribute('aria-label', `Stop ignoring ${login}`);
+    x.addEventListener('click', () => removeDeny(login));
+    const text = document.createElement('span');
+    text.textContent = login;
+    chip.append(x, text);
+    box.appendChild(chip);
+  });
+
+  paintDenySuggestions();
+}
+
+/* Offer reviewers actually seen in the fetched data. Anyone already ignored is
+   filtered out, and teams (@name) are not reviewers you can ignore by login. */
+function paintDenySuggestions() {
+  const dl = document.getElementById('deny-suggestions');
+  if (!dl) return;
+  const have = new Set(denyList().map(normLogin));
+  dl.innerHTML = '';
+  observedValues('reviewer')
+    .filter(v => !v.startsWith('@') && !have.has(normLogin(v)))
+    .slice(0, 200)
+    .forEach(v => {
+      const o = document.createElement('option');
+      o.value = v;
+      dl.appendChild(o);
+    });
+}
+
+/* Only the selected choice's field is editable, so a value can never sit in a
+   box that nothing reads. */
+function markRangeInputs() {
+  const oB = document.getElementById('opt-baseline');
+  const oD = document.getElementById('opt-days');
+  if (!oB || !oD) return;
+  oB.disabled = config.range !== 'baseline';
+  oD.disabled = config.range !== 'days';
+  RANGES.forEach(v => {
+    const el = document.getElementById('rng-' + v);
+    if (el) el.classList.toggle('is-off', config.range !== v);
+  });
+}
+
+function buildWatchRow(watch, index) {
+  const row = document.createElement('div');
+  row.className = 'watch-row';
+
+  const refs = { gen: { repos: 0, branches: 0 }, busy: '', err: '' };
+  rowUi[index] = refs;
+
+  const orgCombo = new Combobox({
+    placeholder: 'Owner or organization',
+    onChange: v => {
+      watch.org = v.trim();
+      watch.repo = ''; watch.branch = '';
+      refs.repoCombo.setValue(''); refs.repoCombo.setOptions([]);
+      refs.branchCombo.setValue(''); refs.branchCombo.setOptions([]); refs.branchCombo.setDisabled(true);
+      saveConfig();
+      if (watch.org) loadRepos(index, watch, refs);
+      else { refs.err = ''; refs.busy = ''; paintRowNote(refs); }
+    },
+  });
+
+  const repoCombo = new Combobox({
+    placeholder: 'Repository',
+    onChange: v => {
+      watch.repo = v.trim();
+      watch.branch = '';
+      refs.branchCombo.setValue('');
+      saveConfig();
+      if (watch.org && watch.repo) loadBranches(index, watch, refs);
+      else { refs.branchCombo.setOptions([]); refs.branchCombo.setDisabled(true); }
+    },
+  });
+
+  const branchCombo = new Combobox({
+    placeholder: 'Base branch',
+    disabled: !watch.repo,
+    onChange: v => { watch.branch = v.trim(); saveConfig(); },
+  });
+
+  refs.orgCombo = orgCombo;
+  refs.repoCombo = repoCombo;
+  refs.branchCombo = branchCombo;
+
+  orgCombo.setOptions(app.orgs);
+  orgCombo.setValue(watch.org);
+  repoCombo.setValue(watch.repo);
+  branchCombo.setValue(watch.branch);
+  branchCombo.setDisabled(false);
+
+  [orgCombo, repoCombo, branchCombo].forEach(c => {
+    const cell = document.createElement('div');
+    cell.className = 'cell';
+    cell.appendChild(c.el);
+    row.appendChild(cell);
+  });
+
+  const del = document.createElement('button');
+  del.className = 'btn-del';
+  del.textContent = '✕';
+  del.title = 'Stop watching';
+  del.addEventListener('click', () => {
+    config.watches.splice(index, 1);
+    if (!config.watches.length) config.watches.push({ org: '', repo: '', branch: '' });
+    /* Drop the removed rows from `results` too. Only `refreshAll` used to
+       rebuild it, so a deleted repository kept feeding the stats bar and the CSV
+       export: the board would say "Nothing being watched yet" while the numbers
+       above it still counted the repository that had just gone, and Export CSV
+       would still write its rows out. */
+    pruneResults();
+    saveConfig();
+    paintConfig();
+    paintResults();
+    paintToolbar();
+  });
+  row.appendChild(del);
+
+  refs.note = document.createElement('div');
+  refs.note.className = 'row-note';
+  row.appendChild(refs.note);
+
+  /* Populate the dropdowns for a row restored from config/URL, without
+     clobbering the values already in it. */
+  if (watch.org) loadRepos(index, watch, refs, true);
+  if (watch.org && watch.repo) loadBranches(index, watch, refs, true);
+
+  return row;
+}
+
+function paintRowNote(refs) {
+  if (!refs.note) return;
+  refs.note.innerHTML = '';
+  if (refs.err) {
+    refs.note.style.color = '#f87171';
+    refs.note.textContent = '⚠ ' + refs.err;
+  } else if (refs.busy) {
+    refs.note.style.color = 'var(--text-mute)';
+    refs.note.innerHTML = `<span class="pulse-dot"></span>${escapeHtml(refs.busy)}`;
+  }
+}
+
+async function loadRepos(index, watch, refs, keepValue) {
+  /* A cached board can be on screen before sign-in finishes; there is
+     nothing to look up yet and no error worth showing. */
+  if (!app.token) return;
+  const gen = ++refs.gen.repos;
+  refs.busy = 'Loading repositories…'; refs.err = ''; paintRowNote(refs);
+  try {
+    const names = await listRepos(watch.org);
+    if (refs.gen.repos !== gen) return;
+    refs.repoCombo.setOptions(names);
+    if (keepValue) refs.repoCombo.setValue(watch.repo);
+  } catch (e) {
+    if (refs.gen.repos !== gen) return;
+    /* Can't enumerate (common with fine-grained tokens) - typing the exact
+       repository name still works, so this is a hint, not an error. */
+    refs.repoCombo.setPlaceholder('Repository (type the exact name)');
+  }
+  if (refs.gen.repos === gen) { refs.busy = ''; paintRowNote(refs); }
+}
+
+async function loadBranches(index, watch, refs, keepValue) {
+  /* A cached board can be on screen before sign-in finishes; there is
+     nothing to look up yet and no error worth showing. */
+  if (!app.token) return;
+  const gen = ++refs.gen.branches;
+  refs.busy = 'Loading branches…'; refs.err = ''; paintRowNote(refs);
+  refs.branchCombo.setDisabled(false);
+  try {
+    const names = await listBranches(watch.org, watch.repo);
+    if (refs.gen.branches !== gen) return;
+    refs.branchCombo.setOptions(names);
+    if (keepValue) refs.branchCombo.setValue(watch.branch);
+    else if (!watch.branch) {
+      /* Pre-select a sensible default so a new row is one click from useful. */
+      const preferred = ['develop', 'main', 'master'].find(n => names.includes(n));
+      if (preferred) { refs.branchCombo.setValue(preferred); watch.branch = preferred; saveConfig(); }
+    }
+  } catch (e) {
+    if (refs.gen.branches !== gen) return;
+    refs.err = e.status === 404
+      ? `Can't read ${watch.org}/${watch.repo} - check the name, or that your token has access.`
+      : e.message;
+  }
+  if (refs.gen.branches === gen) { refs.busy = ''; paintRowNote(refs); }
+}
+
+/* ── Toolbar ────────────────────────────────────────────────────────────────
+   Built once, then updated in place: a timed background refresh must not
+   rebuild the search box out from under someone who is typing in it.        */
+function buildToolbar() {
+  const t = ui.toolbar;
+  if (!t) return;
+  t.innerHTML = '';
+  t.className = 'action-bar';
+
+  /* Display toggles: these change what the fetched data looks like, so they
+     belong with the other controls that act on it rather than among the
+     settings that decide what is fetched. */
+  const toggles = document.createElement('div');
+  toggles.className = 'action-group';
+  toggles.innerHTML = `
+    <label class="opt"><input type="checkbox" id="opt-stacked" />
+      Include stacked PRs
+      <span class="hint" title="A stacked PR targets another PR's branch rather than the watched branch. With this on, the whole chain is followed. Applies to open PRs.">?</span>
+    </label>
+    <label class="opt"><input type="checkbox" id="opt-drafts" /> Hide drafts</label>`;
+  const oS = toggles.querySelector('#opt-stacked');
+  const oR = toggles.querySelector('#opt-drafts');
+  oS.checked = config.includeStacked;
+  oR.checked = config.hideDrafts;
+  /* Stacked PRs are resolved while fetching, so this one needs a refresh to
+     take effect; hiding drafts is a render-time filter and does not. */
+  oS.addEventListener('change', () => {
+    config.includeStacked = oS.checked; saveConfig(); scheduleRefetch();
+  });
+  oR.addEventListener('change', () => {
+    config.hideDrafts = oR.checked; saveConfig(); paintResults();
+  });
+  t.appendChild(toggles);
+
+  const spacer = document.createElement('div');
+  spacer.className = 'spacer';
+  t.appendChild(spacer);
+
+  const status = document.createElement('div');
+  status.className = 'action-group';
+  t.appendChild(status);
+
+  const progress = document.createElement('span');
+  progress.className = 'muted';
+  progress.id = 'gh-refresh-progress';
+  progress.setAttribute('role', 'status');
+  status.appendChild(progress);
+  ui.progress = progress;
+
+  const stamp = document.createElement('span');
+  stamp.className = 'muted';
+  status.appendChild(stamp);
+  ui.stamp = stamp;
+
+  const autoStatus = document.createElement('span');
+  autoStatus.className = 'muted';
+  status.appendChild(autoStatus);
+  ui.autoStatus = autoStatus;
+
+  const buttons = document.createElement('div');
+  buttons.className = 'action-group';
+  t.appendChild(buttons);
+
+  const collapse = document.createElement('button');
+  collapse.className = 'btn-sm';
+  collapse.id = 'btn-collapse-all';
+  collapse.addEventListener('click', () => {
+    const keys = results.map(r => r.key);
+    const anyOpen = keys.some(k => !config.collapsed[k]);
+    keys.forEach(k => { if (anyOpen) config.collapsed[k] = true; else delete config.collapsed[k]; });
+    saveConfig();
+    paintResults();
+    paintToolbar();
+  });
+  buttons.appendChild(collapse);
+  ui.collapseBtn = collapse;
+
+  const csv = document.createElement('button');
+  csv.className = 'btn-sm';
+  csv.textContent = 'Export CSV';
+  csv.addEventListener('click', exportCsv);
+  buttons.appendChild(csv);
+  ui.csvBtn = csv;
+
+  const share = document.createElement('button');
+  share.className = 'btn-sm';
+  share.textContent = 'Copy link';
+  share.title = 'Copy a link that reproduces this exact configuration';
+  share.addEventListener('click', () => {
+    const encoded = encodeConfig(config);
+    const url = location.origin + location.pathname + '#c=' + encoded;
+    /* Claim the hash as already imported before it can ever be read back.
+
+       Copying a link used to plant `#c=` in the sharer's own address bar and
+       leave it there. `loadConfig` would then find, on the next reload, a hash
+       it had no record of importing, adopt it, and overwrite everything the
+       sharer had changed since - with a toast telling them settings had been
+       loaded from a link they never opened. Recording it here is what makes the
+       one-shot-import rule cover the sharer as well as the recipient. */
+    store.set(IMPORTED_KEY, encoded);
+    copyText(url).then(
+      () => toast('Shareable link copied. It carries the settings, never your token.'),
+      () => {
+        /* Only now is the address bar worth using: it is the one place left to
+           read the link from. Throws on a file:// page, which is survivable. */
+        try { history.replaceState(null, '', '#c=' + encoded); } catch (e) { /* ignore */ }
+        toast('Could not copy. The link is now in the address bar.');
+      }
+    );
+  });
+  buttons.appendChild(share);
+
+  const sel = document.createElement('select');
+  sel.id = 'filter-interval';
+  sel.className = 'mini-select';
+  /* No "whatever was stored" entry any more: `migrateConfig` snaps the value to
+     this list, so anything outside it cannot reach here. */
+  AUTO_INTERVALS.forEach(sec => {
+    const o = document.createElement('option');
+    o.value = String(sec);
+    o.textContent = autoLabel(sec);
+    if (sec === config.autoRefreshSec) o.selected = true;
+    sel.appendChild(o);
+  });
+  sel.title = 'How often to re-poll GitHub while this tab is open';
+  sel.setAttribute('aria-label', 'Automatic refresh interval');
+  sel.addEventListener('change', () => {
+    config.autoRefreshSec = Number(sel.value) || 0;
+    saveConfig();
+    startAutoRefresh();
+  });
+  buttons.appendChild(sel);
+
+  buttons.appendChild(buildRefreshSplitButton());
+
+  paintToolbar();
+}
+
+function paintToolbar() {
+  if (!ui.refreshBtn) return;
+  const busy = app.loading || app.connecting;
+  ui.refreshBtn.innerHTML = busy
+    ? `<span class="spinner"></span> ${app.connecting ? 'Signing in…' : 'Refreshing…'}`
+    : '↻ Refresh';
+  ui.refreshBtn.disabled = busy;
+  if (ui.refreshCaret) ui.refreshCaret.disabled = busy;
+  if (busy) closeRefreshMenu();
+  if (ui.progress) {
+    ui.progress.textContent = (app.loading && app.refreshTotal > 1)
+      ? `repository ${app.refreshIndex} of ${app.refreshTotal}`
+      : '';
+  }
+  ui.csvBtn.disabled = !results.some(r => r.prs.length);
+  if (ui.progress && app.connecting) ui.progress.textContent = '';
+  /* While a cold refresh runs over restored rows, say so: the table is
+     showing real data, just not current data. */
+  if (app.lastRefresh && !app.loading) {
+    ui.stamp.textContent = 'Updated ' + app.lastRefresh.toLocaleTimeString();
+    ui.stamp.title = '';
+  } else if (app.snapshotAt) {
+    ui.stamp.textContent = `saved results from ${relTime(app.snapshotAt.toISOString())}`;
+    ui.stamp.title = 'Rows below are from the last completed refresh, kept in this browser. They are replaced as fresh data arrives.';
+  } else {
+    ui.stamp.textContent = '';
+    ui.stamp.title = snapshotNote ? 'Saved results: ' + snapshotNote : '';
+  }
+  if (ui.collapseBtn) {
+    const keys = results.map(r => r.key);
+    ui.collapseBtn.style.display = keys.length > 1 ? '' : 'none';
+    ui.collapseBtn.textContent = keys.some(k => !config.collapsed[k]) ? 'Collapse all' : 'Expand all';
+  }
+  paintFilterChips();
+  paintAutoStatus();
+}
+
+/* ── Refresh, with its variants behind a caret ─────────────────────────────
+   Reviews of merged pull requests are cached, so the everyday refresh skips
+   them. Discarding that cache is the same action with one cache cleared
+   first, which makes it a variant of Refresh rather than a separate button.
+   Choosing a variant runs it once; the default is not changed. */
+const REFRESH_ACTIONS = [
+  {
+    label: 'Refresh',
+    note: 'Re-fetch everything, reusing the cached reviews of merged pull requests.',
+    run() { refreshAll(); },
+  },
+  {
+    label: 'Refetch merged reviews',
+    note: 'Also discard those cached reviews. Use it when a review was added or dismissed after a merge. Costs one extra request per merged pull request.',
+    run() {
+      reviewCache = {};
+      store.del(REVIEWS_KEY);
+      toast('Cached review data cleared - refetching.');
+      refreshAll();
+    },
+  },
+];
+
+function buildRefreshSplitButton() {
+  const wrap = document.createElement('div');
+  wrap.className = 'split-btn';
+
+  const main = document.createElement('button');
+  main.className = 'btn-primary split-main';
+  main.addEventListener('click', () => { closeRefreshMenu(); refreshAll(); });
+
+  const caret = document.createElement('button');
+  caret.className = 'btn-primary split-caret';
+  caret.textContent = '▾';
+  caret.setAttribute('aria-haspopup', 'menu');
+  caret.setAttribute('aria-expanded', 'false');
+  caret.setAttribute('aria-label', 'Other refresh options');
+  caret.title = 'Other refresh options';
+
+  const menu = document.createElement('div');
+  menu.className = 'split-menu';
+  menu.setAttribute('role', 'menu');
+
+  REFRESH_ACTIONS.forEach(action => {
+    const item = document.createElement('button');
+    item.className = 'split-item';
+    item.type = 'button';
+    item.setAttribute('role', 'menuitem');
+    item.innerHTML = `${escapeHtml(action.label)}<span class="note">${escapeHtml(action.note)}</span>`;
+    item.addEventListener('click', () => { closeRefreshMenu(); action.run(); });
+    menu.appendChild(item);
+  });
+
+  caret.addEventListener('click', e => {
+    e.stopPropagation();
+    menu.classList.contains('is-open') ? closeRefreshMenu() : openRefreshMenu();
+  });
+  menu.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { closeRefreshMenu(); caret.focus(); return; }
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    e.preventDefault();
+    const items = [...menu.querySelectorAll('.split-item')];
+    const at = items.indexOf(document.activeElement);
+    const next = e.key === 'ArrowDown' ? at + 1 : at - 1;
+    items[(next + items.length) % items.length].focus();
+  });
+
+  wrap.append(main, caret, menu);
+  ui.refreshBtn = main;
+  ui.refreshCaret = caret;
+  ui.refreshMenu = menu;
+  return wrap;
+}
+
+/* The outside-click handler only exists while the menu is open, so there is
+   nothing left on the document to leak when the panel is rebuilt. */
+let refreshMenuAway = null;
+function openRefreshMenu() {
+  const { refreshMenu: menu, refreshCaret: caret } = ui;
+  if (!menu) return;
+  menu.classList.add('is-open');
+  caret.setAttribute('aria-expanded', 'true');
+  const first = menu.querySelector('.split-item');
+  if (first) first.focus();
+  refreshMenuAway = e => { if (!menu.parentNode.contains(e.target)) closeRefreshMenu(); };
+  document.addEventListener('mousedown', refreshMenuAway);
+}
+function closeRefreshMenu() {
+  const { refreshMenu: menu, refreshCaret: caret } = ui;
+  if (menu) menu.classList.remove('is-open');
+  if (caret) caret.setAttribute('aria-expanded', 'false');
+  if (refreshMenuAway) { document.removeEventListener('mousedown', refreshMenuAway); refreshMenuAway = null; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Filters
+
+   Typed as `field: value`, held as removable chips. One chip per field, so
+   re-entering a field replaces it rather than silently ANDing two values
+   together - `author: a` and `author: b` at once would always match nothing.
+   ══════════════════════════════════════════════════════════════════════════ */
+function addFilter(field, value) {
+  const f = String(field || '').trim().toLowerCase();
+  const v = String(value || '').trim();
+  if (!FILTER_FIELDS.includes(f) || !v) return false;
+  const existing = config.filters.find(x => x.field === f);
+  if (existing) existing.value = v;
+  else config.filters.push({ field: f, value: v });
+  saveConfig();
+  paintFilterChips();
+  paintResults();
+  return true;
+}
+
+function removeFilter(field) {
+  config.filters = config.filters.filter(f => f.field !== field);
+  saveConfig();
+  paintFilterChips();
+  paintResults();
+}
+
+function paintFilterChips() {
+  const field = ui.filterField;
+  const input = ui.filterInput;
+  if (!field || !input) return;
+  field.querySelectorAll('.gh-token').forEach(el => el.remove());
+  config.filters.forEach(f => {
+    const chip = document.createElement('span');
+    chip.className = 'gh-token is-include';
+    chip.dataset.field = f.field;
+    const x = document.createElement('button');
+    x.className = 'gh-token-x';
+    x.type = 'button';
+    x.textContent = '×';
+    x.title = `Remove the ${f.field} filter`;
+    x.setAttribute('aria-label', `Remove the ${f.field} filter`);
+    x.addEventListener('click', () => removeFilter(f.field));
+    const text = document.createElement('span');
+    text.innerHTML = `<span class="filter-chip-field">${escapeHtml(f.field)}:</span> ${escapeHtml(f.value)}`;
+    chip.append(x, text);
+    field.appendChild(chip);              // chips follow the box, wrapping under it
+  });
+  input.placeholder = 'Add a filter - e.g. author: bthomee';
+}
+
+/* Every value present in the fetched data for a field. `title` is unbounded,
+   so it gets no suggestions. */
+function observedValues(field) {
+  if (field === 'title') return [];
+  const set = new Set();
+  results.forEach(r => r.prs.forEach(pr => {
+    switch (field) {
+      case 'author':
+        if (pr.user && pr.user.login) set.add(pr.user.login);
+        break;
+      case 'reviewer': {
+        const rv = pr.reviewers || {};
+        ['approved', 'changes', 'commented', 'pending', 'dismissed']
+          .forEach(k => (rv[k] || []).forEach(l => set.add(l)));
+        break;
+      }
+      case 'status':
+        if (pr.status) set.add(pr.status);
+        break;
+      case 'label':
+        (pr.labels || []).forEach(l => {
+          const n = typeof l === 'string' ? l : l.name;
+          if (n) set.add(n);
+        });
+        break;
+      case 'milestone':
+        set.add(pr.milestone && pr.milestone.title ? pr.milestone.title : NO_VALUE);
+        break;
+    }
+  }));
+  return [...set].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+}
+
+/* Split what has been typed into a field part and a value part. */
+function parseFilterInput(raw) {
+  const m = /^\s*([^:]*?)\s*:\s*([\s\S]*)$/.exec(raw);
+  if (!m) return { field: null, fieldText: raw.trim(), value: '' };
+  return { field: m[1].trim().toLowerCase(), fieldText: m[1].trim(), value: m[2] };
+}
+
+function filterSuggestions(raw) {
+  const { field, fieldText, value } = parseFilterInput(raw);
+  if (field === null) {
+    /* Still naming the field. */
+    const q = fieldText.toLowerCase();
+    return FILTER_FIELDS
+      .filter(f => f.startsWith(q))
+      .map(f => ({ kind: 'field', text: f, insert: f + ': ', label: f + ':' }));
+  }
+  if (!FILTER_FIELDS.includes(field)) return [];
+  /* Ignore any quotes already typed so suggestions keep working while the
+     value is being edited. */
+  const q = value.trim().replace(/^"+|"+$/g, '').toLowerCase();
+  return observedValues(field)
+    .filter(v => v.toLowerCase().includes(q))
+    .slice(0, 60)
+    .map(v => ({ kind: 'value', text: v, insert: `${field}: "${v}"`, label: v }));
+}
+
+function wireFilterInput(input, drop) {
+  let items = [];
+  let active = -1;
+
+  const close = () => { drop.style.display = 'none'; drop.innerHTML = ''; items = []; active = -1; };
+
+  const render = () => {
+    items = filterSuggestions(input.value);
+    drop.innerHTML = '';
+    if (!items.length || document.activeElement !== input) { drop.style.display = 'none'; return; }
+    if (active >= items.length) active = items.length - 1;
+    items.forEach((it, i) => {
+      const li = document.createElement('li');
+      li.className = 'filter-opt' + (i === active ? ' active' : '');
+      li.innerHTML = it.kind === 'field'
+        ? `<span class="filter-opt-field">${escapeHtml(it.label)}</span>`
+        : escapeHtml(it.label);
+      li.addEventListener('mousedown', e => { e.preventDefault(); choose(i); });
+      drop.appendChild(li);
+    });
+    drop.style.display = 'block';
+  };
+
+  const choose = (i) => {
+    const it = items[i];
+    if (!it) return;
+    input.value = it.insert;
+    if (it.kind === 'value') { submit(); return; }
+    render();                     // field chosen: now suggest its values
+  };
+
+  const submit = () => {
+    const { field, value } = parseFilterInput(input.value);
+    if (field === null || !FILTER_FIELDS.includes(field)) {
+      /* Typing a fragment of a title and pressing Enter is the most obvious
+         thing to try, and it used to flash red and list six field names. Since
+         `title` is the only unbounded field, plain text can only sensibly mean
+         that - so treat it as a title search rather than an error. A string
+         that does contain a colon but names no real field is still a mistake
+         worth pointing out, because it was probably meant as `field: value`. */
+      const bare = input.value.trim();
+      if (bare && field === null && addFilter('title', bare)) {
+        input.value = '';
+        close();
+        return;
+      }
+      flashInvalid(input);
+      return;
+    }
+    if (!value.trim()) { render(); return; }   // field only: keep suggesting
+    if (addFilter(field, value)) { input.value = ''; close(); }
+  };
+
+  input.addEventListener('input', () => { active = -1; render(); });
+  input.addEventListener('focus', render);
+  input.addEventListener('blur', () => setTimeout(close, 120));
+  input.addEventListener('keydown', e => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); if (items.length) { active = (active + 1) % items.length; render(); } return; }
+    if (e.key === 'ArrowUp')   { e.preventDefault(); if (items.length) { active = (active - 1 + items.length) % items.length; render(); } return; }
+    if (e.key === 'Tab') {
+      /* Tab completes rather than submits, so a value can still be edited. */
+      if (items.length) {
+        e.preventDefault();
+        const i = active >= 0 ? active : 0;
+        input.value = items[i].insert;
+        active = -1;
+        /* Re-render either way: after a field it suggests that field's values,
+           after a value it narrows to the completed text. */
+        render();
+      }
+      return;
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (active >= 0 && items[active]) choose(active);
+      else submit();
+      return;
+    }
+    if (e.key === 'Escape') { close(); input.blur(); }
+  });
+}
+
+function flashInvalid(el) {
+  const target = ui.filterInput || el;
+  target.classList.add('is-invalid');
+  setTimeout(() => target.classList.remove('is-invalid'), 900);
+  toast('Filter must be one of: ' + FILTER_FIELDS.join(', ') + ' - e.g. "author: bthomee"');
+}
+
+
+/* ── Results ────────────────────────────────────────────────────────────── */
+/* A value wrapped in double quotes means exactly that value; bare text is a
+   substring match. Picking from the suggestion list inserts the quoted form,
+   because choosing "3.4.0" from a list of real milestones plainly means that
+   milestone and not also "3.4.0 (tests)". Typing stays loose, so a partial
+   title or a half-remembered login still finds things. */
+function prMatchesFilter(pr, f) {
+  const raw = String(f.value || '').trim();
+  if (!raw) return true;
+  const exact = raw.length >= 2 && raw.startsWith('"') && raw.endsWith('"');
+  const v = (exact ? raw.slice(1, -1) : raw).toLowerCase();
+  if (!v) return true;
+  const has = x => {
+    const t = String(x === null || x === undefined ? '' : x).toLowerCase();
+    return exact ? t === v : t.includes(v);
+  };
+  switch (f.field) {
+    case 'title':
+      return has(pr.title) || has('#' + pr.number);
+    case 'author':
+      return has(pr.user && pr.user.login);
+    case 'status':
+      return has(pr.status);
+    case 'label':
+      return (pr.labels || []).some(l => has(typeof l === 'string' ? l : l.name));
+    case 'milestone': {
+      const t = (pr.milestone && pr.milestone.title) || '';
+      if (v === NO_VALUE.toLowerCase() || v === 'none') return !t;
+      return has(t);
+    }
+    case 'reviewer': {
+      const rv = pr.reviewers || {};
+      return ['approved', 'changes', 'commented', 'pending', 'dismissed']
+        .some(k => (rv[k] || []).some(has));
+    }
+  }
+  return true;
+}
+
+function visiblePrs(r) {
+  return r.prs.filter(pr => {
+    if (config.hideDrafts && pr.draft) return false;
+    return config.filters.every(f => prMatchesFilter(pr, f));
+  });
+}
+
+function describeFilters() {
+  return config.filters.map(f => `${f.field}: ${f.value}`).join(', ');
+}
+
+function paintResults() {
+  paintStats();
+  const c = ui.results;
+  if (!c) return;
+  c.innerHTML = '';
+
+  const configured = config.watches.filter(w => w.org && w.repo && w.branch);
+  if (!configured.length) {
+    c.innerHTML = `
+      <div class="empty-state">
+        <div class="icon">📋</div>
+        <div class="title">Nothing being watched yet</div>
+        <div class="sub">Pick an owner, a repository and the base branch you care about above, then hit Refresh. Add as many rows as you like: each one gets its own section below, so you can follow <code>develop</code> and a <code>staging/x.y.z</code> release branch on one page.</div>
+      </div>`;
+    return;
+  }
+
+  if (!results.length) {
+    c.innerHTML = `
+      <div class="empty-state">
+        <div class="icon">↻</div>
+        <div class="title">Ready when you are</div>
+        <div class="sub">Hit Refresh to pull the current pull requests for the ${configured.length} branch${configured.length === 1 ? '' : 'es'} above.</div>
+      </div>`;
+    return;
+  }
+
+  results.forEach(r => c.appendChild(buildGroup(r)));
+}
+
+function buildGroup(r) {
+  const g = document.createElement('div');
+  g.className = 'group';
+
+  const shown = visiblePrs(r);
+  const openCount   = shown.filter(p => !p.merged_at).length;
+  const mergedCount = shown.filter(p => !!p.merged_at).length;
+
+  const head = document.createElement('div');
+  head.className = 'group-head';
+  /* Path segments are encoded and the finished URL is escaped before it goes
+     anywhere near an href attribute: org and repo can arrive from a shared
+     link, and an unescaped quote there is a script-injection point. */
+  const prListUrl = `https://github.com/${seg(r.org)}/${seg(r.repo)}/pulls?q=` +
+    encodeURIComponent(`is:pr is:open base:${r.branch}`);
+  const collapsed = !!config.collapsed[r.key];
+  const stacked = shown.filter(p => p.stackDepth > 0).length;
+  head.innerHTML = `
+    <button class="group-toggle" type="button" aria-expanded="${collapsed ? 'false' : 'true'}"
+            title="${collapsed ? 'Expand' : 'Collapse'} this repository">${collapsed ? '▸' : '▾'}</button>
+    <a class="group-title no-underline" href="https://github.com/${seg(r.org)}/${seg(r.repo)}" target="_blank" rel="noopener">${escapeHtml(r.org)}/${escapeHtml(r.repo)}</a>
+    <span class="t-faint">→</span>
+    <span class="group-branch">${escapeHtml(r.branch)}</span>
+    ${r.cutoffLabel ? `<span class="cutoff-chip" title="How much history this branch pulls in">${escapeHtml(r.cutoffLabel)}</span>` : ''}
+    ${r.truncated ? `<span class="trunc-chip" title="GitHub paging stopped at this tool's limit, so older items are not shown">⚠ showing ${escapeHtml(r.truncated)}</span>` : ''}
+    ${r.mergeQueueError ? `<span class="trunc-chip" title="${escapeHtml(r.mergeQueueError)}">⚠ merge-queue state unavailable</span>` : ''}
+    <div class="grow"></div>
+    ${r.loading ? '<span class="spinner" title="Refreshing - the list below stays until the new data is ready"></span><span class="group-progress"></span>' : ''}
+    <span class="group-count">${openCount} open · ${mergedCount} merged${stacked ? ` · ${stacked} stacked` : ''}</span>
+    <a class="btn-sm no-underline" href="${escapeHtml(prListUrl)}" target="_blank" rel="noopener">Open on GitHub ↗</a>`;
+
+  const toggle = () => {
+    if (config.collapsed[r.key]) delete config.collapsed[r.key];
+    else config.collapsed[r.key] = true;
+    saveConfig();
+    paintResults();
+    paintToolbar();
+  };
+  /* Hand setProgress live nodes to write into, so per-pull-request updates
+     cost a textContent write rather than a full repaint. */
+  if (r.loading) {
+    r._progressEl = head.querySelector('.group-progress');
+    if (r._progressEl) r._progressEl.textContent = progressLabel(r);
+    const bar = document.createElement('div');
+    bar.className = 'group-bar';
+    const pct = r.progressTotal > 0 ? Math.min(100, Math.round((r.progressDone / r.progressTotal) * 100)) : 0;
+    bar.style.width = pct + '%';
+    head.appendChild(bar);
+    r._progressBar = bar;
+  } else {
+    r._progressEl = null;
+    r._progressBar = null;
+  }
+
+  head.querySelector('.group-toggle').addEventListener('click', toggle);
+  head.addEventListener('click', e => {
+    /* Anywhere on the bar except the links toggles it. */
+    if (e.target.closest('a') || e.target.closest('.group-toggle')) return;
+    /* Now that the names in the bar are selectable, releasing the mouse at the
+       end of a selection must not also collapse the group. */
+    const sel = window.getSelection();
+    if (sel && !sel.isCollapsed && head.contains(sel.anchorNode)) return;
+    toggle();
+  });
+  if (collapsed) head.classList.add('collapsed');
+  g.appendChild(head);
+
+  if (collapsed) return g;
+
+  const body = document.createElement('div');
+  body.className = 'group-body';
+
+  if (r.error) {
+    body.innerHTML = `<div class="err-wrap"><div class="err-banner m0"><strong>Couldn't load this one.</strong> ${escapeHtml(r.error)}</div></div>`;
+    g.appendChild(body);
+    return g;
+  }
+
+  /* A staging branch that hasn't been cut yet - normal mid-cycle, so say so
+     rather than showing an empty table that looks like a failure. */
+  if (r.branchMissing) {
+    body.innerHTML = `<div class="pad-note is-info">
+      Branch <code>${escapeHtml(r.branch)}</code> doesn't exist in this repository yet - nothing to track until it's created.</div>`;
+    g.appendChild(body);
+    return g;
+  }
+
+  if (r.loading && !r.prs.length) {
+    body.innerHTML = `<div class="pad-note">Loading pull requests…</div>`;
+    g.appendChild(body);
+    return g;
+  }
+
+  if (!shown.length) {
+    let why;
+    if (!r.prs.length) {
+      why = 'No pull requests found for this branch.';
+    } else if (config.filters.length) {
+      why = `${r.prs.length} pull request${r.prs.length === 1 ? '' : 's'} here, but none match <strong class="t-dim">${escapeHtml(describeFilters())}</strong>.`;
+    } else if (config.hideDrafts) {
+      why = `${r.prs.length} pull request${r.prs.length === 1 ? '' : 's'} here, all of them drafts.`;
+    } else {
+      why = 'Nothing matches the current filters.';
+    }
+    body.innerHTML = `<div class="pad-note">${why}</div>`;
+    g.appendChild(body);
+    return g;
+  }
+
+  const table = document.createElement('table');
+  table.innerHTML = `
+    <thead><tr>
+      <th class="col-pr">Pull request</th>
+      <th class="col-author">Author</th>
+      <th class="col-rev">Reviewers</th>
+      <th class="col-labels">Labels</th>
+      <th class="col-status">Status</th>
+    </tr></thead>`;
+  const tbody = document.createElement('tbody');
+  shown.forEach(pr => tbody.appendChild(buildRow(pr, r)));
+  table.appendChild(tbody);
+  body.appendChild(table);
+  g.appendChild(body);
+  return g;
+}
+
+function buildRow(pr, r) {
+  const tr = document.createElement('tr');
+  tr.className = 'pr-row';
+
+  /* Escaped once here; both hrefs below interpolate it as-is. */
+  const url = escapeHtml(pr.html_url || `https://github.com/${seg(r.org)}/${seg(r.repo)}/pull/${pr.number}`);
+  const when = pr.merged_at
+    ? 'merged ' + relTime(pr.merged_at)
+    : 'updated ' + relTime(pr.updated_at || pr.created_at);
+
+  /* Pull request */
+  const tdPr = document.createElement('td');
+  tdPr.className = 'col-pr';
+  const depth = pr.stackDepth || 0;
+  tdPr.style.paddingLeft = depth ? `${0.875 + depth}rem` : '';
+  tdPr.innerHTML = `
+    ${depth ? `<span class="stack-mark" title="Stacked on #${pr.stackParent} - targets that PR's branch, not ${escapeHtml(r.branch)}">↳</span>` : ''}
+    <a class="pr-title" href="${url}" target="_blank" rel="noopener">${escapeHtml(stripPrSuffix(pr.title))}</a>
+    <div class="pr-meta">
+      <a class="pr-num" href="${url}" target="_blank" rel="noopener">#${pr.number}</a>
+      ${pr.draft ? '<span class="draft-tag">Draft</span>' : ''}
+      <span>${when}</span>
+      ${pr.milestone && pr.milestone.title ? `<span title="Milestone">🎯 ${escapeHtml(pr.milestone.title)}</span>` : ''}
+      ${depth ? `<span class="stack-tag" title="Base branch: ${escapeHtml((pr.base && pr.base.ref) || '')}">stacked on #${pr.stackParent}</span>` : ''}
+    </div>`;
+  tr.appendChild(tdPr);
+
+  /* Author */
+  const tdAuthor = document.createElement('td');
+  tdAuthor.className = 'col-author';
+  const author = pr.user && pr.user.login;
+  tdAuthor.innerHTML = author
+    ? `<a class="handle" href="https://github.com/${encodeURIComponent(author)}" target="_blank" rel="noopener">${escapeHtml(author)}</a>`
+    : '<span class="muted">–</span>';
+  tr.appendChild(tdAuthor);
+
+  /* Reviewers */
+  const tdRev = document.createElement('td');
+  tdRev.className = 'col-rev';
+  tdRev.appendChild(buildReviewerCell(pr));
+  tr.appendChild(tdRev);
+
+  /* Labels */
+  const tdLabels = document.createElement('td');
+  tdLabels.className = 'col-labels';
+  const labels = (pr.labels || []).filter(l => l && (typeof l === 'string' ? l : l.name));
+  if (!labels.length) {
+    tdLabels.innerHTML = '<span class="muted">–</span>';
+  } else {
+    const wrap = document.createElement('div');
+    wrap.className = 'chips';
+    labels.forEach(l => {
+      const name = typeof l === 'string' ? l : l.name;
+      const hex  = (typeof l === 'object' && l.color) ? l.color : '64748b';
+      const a = document.createElement('a');
+      a.className = 'chip chip-label';
+      a.href = `https://github.com/${seg(r.org)}/${seg(r.repo)}/labels/${encodeURIComponent(name)}`;
+      a.target = '_blank'; a.rel = 'noopener';
+      a.textContent = name;
+      a.title = (typeof l === 'object' && l.description) ? l.description : name;
+      /* Use the label's own GitHub colour, muted for a dark background. */
+      a.style.background   = `#${hex}1f`;
+      a.style.color        = lightenForDark(hex);
+      a.style.borderColor  = `#${hex}55`;
+      wrap.appendChild(a);
+    });
+    tdLabels.appendChild(wrap);
+  }
+  tr.appendChild(tdLabels);
+
+  /* Status */
+  const tdStatus = document.createElement('td');
+  tdStatus.className = 'col-status';
+  const meta = STATUS_META[pr.status] || { color: 'var(--text-dim)' };
+  const why = pr.status === 'Queued' ? queuedReason(pr) : '';
+  /* Built as nodes rather than markup so the colour goes through `element.style`.
+     A `style` attribute in an innerHTML template is what forces the policy to
+     allow `style-src 'unsafe-inline'` for the whole page; the CSSOM is not
+     restricted by CSP at all, and the value here changes per row. */
+  const status = document.createElement('span');
+  status.className = 'status';
+  status.style.color = meta.color;
+  if (why) status.title = why;
+  const dot = document.createElement('span');
+  dot.className = 'dot';
+  dot.style.background = meta.color;
+  status.append(dot, document.createTextNode(pr.status));
+  tdStatus.appendChild(status);
+  tr.appendChild(tdStatus);
+
+  return tr;
+}
+
+/* Approved / changes-requested / commented / still-invited, as distinct rows
+   of chips so "asked" and "answered" are never confused. */
+function buildReviewerCell(pr) {
+  const rv = pr.reviewers || { approved: [], changes: [], commented: [], pending: [], dismissed: [] };
+  const wrap = document.createElement('div');
+
+  if (pr.reviewError) {
+    wrap.innerHTML = `<span class="muted" title="${escapeHtml(pr.reviewError)}">reviews unavailable</span>`;
+    return wrap;
+  }
+
+  const groups = [
+    { list: rv.approved,  cls: 'chip-approved',  ico: '✓', tip: 'Approved' },
+    { list: rv.changes,   cls: 'chip-changes',   ico: '✋', tip: 'Requested changes' },
+    { list: rv.commented, cls: 'chip-commented', ico: '💬', tip: 'Commented, no verdict yet' },
+    { list: rv.pending,   cls: 'chip-pending',   ico: '⏳', tip: 'Invited, not responded yet' },
+    { list: rv.dismissed, cls: 'chip-dismissed', ico: '⊘', tip: 'Review dismissed' },
+  ];
+
+  let any = false;
+  groups.forEach(gr => {
+    if (!gr.list.length) return;
+    any = true;
+    const line = document.createElement('div');
+    line.className = 'rev-group chips';
+    gr.list.forEach(login => {
+      const isTeam = login.startsWith('@');
+      /* A team has no user page to link to, so it is not a link. `href="#"`
+         looked the same but scrolled the board to the top and pushed a history
+         entry on every click. */
+      const el = document.createElement(isTeam ? 'span' : 'a');
+      el.className = 'chip ' + gr.cls;
+      if (!isTeam) {
+        el.href = `https://github.com/${encodeURIComponent(login)}`;
+        el.target = '_blank';
+        el.rel = 'noopener';
+      }
+      el.title = `${gr.tip}: ${login}`;
+      el.innerHTML = `<span class="ico">${gr.ico}</span>${escapeHtml(login)}`;
+      line.appendChild(el);
+    });
+    wrap.appendChild(line);
+  });
+
+  if (!any) {
+    wrap.innerHTML = pr.merged_at
+      ? '<span class="muted">no recorded reviews</span>'
+      : '<span class="muted">no reviewers yet</span>';
+  }
+  return wrap;
+}
+
+/* ── Stats ──────────────────────────────────────────────────────────────── */
+function paintStats() {
+  const s = ui.stats;
+  if (!s) return;
+  /* One entry per pull request even when two watched rows both surface it,
+     so the totals cannot be inflated by overlapping rows. */
+  const seenPr = new Set();
+  const all = [];
+  results.forEach(r => visiblePrs(r).forEach(pr => {
+    const key = `${r.org}/${r.repo}#${pr.number}`;
+    if (seenPr.has(key)) return;
+    seenPr.add(key);
+    all.push(pr);
+  }));
+  if (!all.length) { s.innerHTML = ''; return; }
+
+  const open = all.filter(p => !p.merged_at);
+  const byStatus = st => open.filter(p => p.status === st).length;
+  const colour = st => (STATUS_META[st] || {}).color || 'var(--text-dim)';
+
+  /* Every open-PR column keys off `status`, which holds exactly one value per
+     pull request, so these buckets are disjoint by construction. The previous
+     "No approval yet" was computed independently of status and counted every
+     changes-requested PR a second time.
+
+     Note they do not sum to Open: a Draft, or an approved PR not yet labelled
+     or queued, sits in none of them. Each cell says what it counts. */
+  const cells = [
+    { v: open.length,                   l: 'Open',              c: 'var(--text)',
+      t: 'Open pull requests matching the current filters.' },
+    { v: byStatus('In Review'),         l: 'No approval yet',   c: colour('In Review'),
+      t: 'Open, nobody has approved yet, and no changes are requested. Does not overlap the columns to its right.' },
+    { v: byStatus('Changes Requested'), l: 'Changes requested', c: colour('Changes Requested'),
+      t: 'At least one reviewer asked for changes.' },
+    { v: byStatus('Ready to Merge'),    l: 'Ready to Merge',    c: colour('Ready to Merge'),
+      t: `Carrying the "${READY_LABEL}" label.` },
+    { v: byStatus('Queued'),            l: 'Queued',            c: colour('Queued'),
+      t: 'Waiting to land on its own: in the merge queue, or auto-merge is enabled.' },
+    { v: all.length - open.length,      l: 'Merged',            c: colour('Merged'),
+      t: 'Merged inside the range each watched row is set to.' },
+  ];
+  /* Nodes, not markup: each cell's colour is per-status, and a `style`
+     attribute in a template is what would force `style-src 'unsafe-inline'`. */
+  s.innerHTML = '';
+  const bar = document.createElement('div');
+  bar.className = 'stats-bar';
+  cells.forEach(c => {
+    const cell = document.createElement('div');
+    cell.className = 'stat-cell';
+    cell.title = c.t;
+    const val = document.createElement('div');
+    val.className = 'stat-val';
+    val.style.color = c.c;
+    val.textContent = c.v;
+    const lbl = document.createElement('div');
+    lbl.className = 'stat-lbl';
+    lbl.textContent = c.l;
+    cell.append(val, lbl);
+    bar.appendChild(cell);
+  });
+  s.appendChild(bar);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Export / helpers
+   ══════════════════════════════════════════════════════════════════════════ */
+function exportCsv() {
+  const rows = [[
+    'Repository', 'Branch', 'PR', 'Number', 'URL', 'Author', 'Status',
+    'Approved by', 'Changes requested by', 'Commented', 'Awaiting review from',
+    'Labels', 'Milestone', 'Merged at', 'Updated at', 'Range', 'Stacked on', 'Queued because',
+  ]];
+  results.forEach(r => visiblePrs(r).forEach(pr => {
+    const rv = pr.reviewers || { approved: [], changes: [], commented: [], pending: [] };
+    rows.push([
+      `${r.org}/${r.repo}`, r.branch, stripPrSuffix(pr.title), pr.number,
+      pr.html_url || '', (pr.user && pr.user.login) || '', pr.status,
+      rv.approved.join(', '), rv.changes.join(', '), rv.commented.join(', '), rv.pending.join(', '),
+      (pr.labels || []).map(l => typeof l === 'string' ? l : l.name).join(', '),
+      pr.milestone ? pr.milestone.title : '',
+      pr.merged_at || '', pr.updated_at || '', r.cutoffLabel || '',
+      pr.stackParent ? '#' + pr.stackParent : '',
+      queuedReason(pr),
+    ]);
+  }));
+
+  /* `toCsvBlob` neutralises formula triggers as well as quoting. Pull request
+     titles, label names, milestone titles and logins all reach these cells, and
+     a title is written by anyone who can open a pull request against a watched
+     repository - so a cell is not trusted text just because it came from the
+     GitHub API. See the note on `csvCell` in gh-common.js. */
+  downloadBlob(toCsvBlob(rows), `pr-tracker-${new Date().toISOString().slice(0, 10)}.csv`);
+}
+
+/* Raise a GitHub label colour to something legible on a dark background. */
+function lightenForDark(hex) {
+  const h = String(hex || '').replace('#', '');
+  if (h.length !== 6) return 'var(--text-dim)';
+  let r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  if (lum < 0.55) {
+    const f = 0.55 / Math.max(lum, 0.08);
+    r = Math.min(255, Math.round(r * f + 40));
+    g = Math.min(255, Math.round(g * f + 40));
+    b = Math.min(255, Math.round(b * f + 40));
+  }
+  return `rgb(${r},${g},${b})`;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Init
+   ══════════════════════════════════════════════════════════════════════════ */
+/* Everything this page owns, torn down when the shared auth signs out. */
+function resetPageState() {
+  closeRefreshMenu();
+  abandonRefresh();
+  app.snapshotAt = null;
+  stopAutoRefresh();
+  document.removeEventListener('visibilitychange', onVisibilityChange);
+  window.removeEventListener('pageshow', onPageShow);
+  destroyWatchRowCombos();
+  results = [];
+  openPrCache = new Map();
+  mergeQueueCache = new Map();
+  Object.keys(ui).forEach(k => delete ui[k]);
+}
+
+/* Sign-in, token storage and the token screen live in gh-common.js, so one
+   token covers every dashboard in this suite. */
+GHAuth.configure({
+  icon:  '📋',
+  title: 'PR Review Tracker',
+  blurb: 'Track open and recently merged pull requests across any number of repositories and branches: authors, who has been asked to review, who has approved, and the labels applied.',
+  /* Runs before sign-in even starts. Nothing here touches the network: the
+     snapshot is in local storage, so last time's board can be on screen while
+     the token is still being checked. */
+  onRestore() {
+    results = loadSnapshot();
+    if (!results.length) return false;
+    applyDenylistToResults();      // the snapshot holds unfiltered lists
+    showMain();
+    return true;
+  },
+
+  onConnected() {
+    if (importedFromLink) {
+      importedFromLink = false;
+      toast('Settings loaded from the shared link and saved. Later changes stay yours.');
+    }
+    /* Either onRestore already built the page, in which case only the parts
+       that needed a token are missing, or there was no snapshot and this is
+       the first paint. */
+    if (ui.configPanel) {
+      paintHeaderIdentity();
+      paintConfig();               // dropdowns can be populated now
+      paintToolbar();
+    } else {
+      results = loadSnapshot();
+      applyDenylistToResults();
+      showMain();
+    }
+    if (config.watches.some(w => w.org && w.repo && w.branch)) refreshAll();
+  },
+  onDisconnected: resetPageState,
+});
+
+config = loadConfig();
+GHAuth.start();
+</script>
+</body>
+</html>

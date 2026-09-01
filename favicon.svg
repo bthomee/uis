@@ -1,3 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-  <text y=".9em" font-size="90">🔀</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Bart's UIs">
+  <!-- All three pages referenced favicon.svg and it did not exist, so every page
+       load spent a request on a 404. Colours are the suite's --bg and --accent. -->
+  <rect width="64" height="64" rx="14" fill="#0f172a"/>
+  <g fill="none" stroke="#818cf8" stroke-width="6" stroke-linecap="round">
+    <path d="M20 14v22"/>
+    <path d="M44 28v22"/>
+    <path d="M20 36a12 12 0 0 0 12 12h0a12 12 0 0 0 12-12"/>
+  </g>
+  <circle cx="20" cy="12" r="6" fill="#818cf8"/>
+  <circle cx="44" cy="52" r="6" fill="#4ade80"/>
 </svg>
